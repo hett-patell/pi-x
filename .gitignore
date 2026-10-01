@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Pi local state (never ship these)
+.pi/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

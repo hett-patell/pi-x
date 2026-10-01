@@ -1,0 +1,37 @@
+{
+  "name": "pi-x-insights",
+  "version": "0.1.0",
+  "description": "Scrape & analyze X (Twitter) with Pi — multi-account browser scraping, free single-tweet fetch, SocialData search, and AI-synthesized insights.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "twitter",
+    "x",
+    "scraper",
+    "ai-agent",
+    "browser-automation",
+    "social-listening"
+  ],
+  "license": "MIT",
+  "author": "Het Patel <hetworkshard@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "github:hett-patell/pi-x-insights"
+  },
+  "homepage": "https://github.com/hett-patell/pi-x-insights",
+  "bugs": "https://github.com/hett-patell/pi-x-insights/issues",
+  "files": [
+    "extensions",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "*"
+  },
+  "engines": {
+    "pi": ">=0.87"
+  }
+}
