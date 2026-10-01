@@ -1,6 +1,6 @@
 {
   "name": "pi-x",
-  "version": "1.0.0-dev",
+  "version": "1.0.0",
   "description": "X (Twitter) for Pi agents — trending topics & news with 'why it's trending' drill-down, search, threads, profiles. No API keys: uses your logged-in browser session.",
   "type": "module",
   "keywords": ["pi-package", "pi", "pi-coding-agent", "pi-extension", "twitter", "x", "trending", "scraper", "ai-agent", "social-listening"],
