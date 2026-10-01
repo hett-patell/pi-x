@@ -1,5 +1,5 @@
 {
-  "name": "pi-x-insights",
+  "name": "pi-x",
   "version": "0.2.0",
   "description": "Scrape & analyze X (Twitter) with Pi — multi-account browser scraping, free single-tweet fetch, SocialData search, and AI-synthesized insights.",
   "keywords": [
@@ -17,10 +17,10 @@
   "author": "Het Patel <hetworkshard@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "github:hett-patell/pi-x-insights"
+    "url": "github:hett-patell/pi-x"
   },
-  "homepage": "https://github.com/hett-patell/pi-x-insights",
-  "bugs": "https://github.com/hett-patell/pi-x-insights/issues",
+  "homepage": "https://github.com/hett-patell/pi-x",
+  "bugs": "https://github.com/hett-patell/pi-x/issues",
   "files": [
     "extensions",
     "skills",

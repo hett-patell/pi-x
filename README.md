@@ -1,4 +1,4 @@
-# 🐦 pi-x-insights
+# 🐦 pi-x
 
 > Scrape & analyze **X (Twitter)** from inside [Pi](https://pi.dev) — self-diagnosing, multi-account browser scraping, free single-tweet fetch, and AI-synthesized insights. No $200/mo API required.
 
@@ -46,15 +46,15 @@ The official X API has **no free search tier** — free = posting only, and sear
 
 ### In Pi (recommended)
 ```bash
-pi install git:github.com/hett-patell/pi-x-insights
+pi install git:github.com/hett-patell/pi-x
 # or try it once without adding it:
-pi -e git:github.com/hett-patell/pi-x-insights
+pi -e git:github.com/hett-patell/pi-x
 ```
 
 ### Local / dev
 ```bash
-git clone https://github.com/hett-patell/pi-x-insights
-pi install ./pi-x-insights
+git clone https://github.com/hett-patell/pi-x
+pi install ./pi-x
 ```
 
 ## ✅ Requirements
@@ -133,7 +133,7 @@ x.com search operators are supported in `query`:
 ## 🗂️ Package contents
 
 ```
-pi-x-insights/
+pi-x/
 ├── extensions/
 │   └── x-insights.ts     # the extension (4 tools + /x command)
 ├── skills/
