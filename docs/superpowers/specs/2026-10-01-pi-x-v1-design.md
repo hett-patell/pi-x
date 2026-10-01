@@ -198,3 +198,40 @@ and after account changes.
 
 Home/following feeds, bookmarks, lists, X Articles, posting/any write action, non-X sources,
 direct cookie API without a browser.
+
+## 13. Addendum (2026-10-01, after OSS survey + endpoint probes)
+
+Verified live: with each operation's `featureSwitches` (from the bundle metadata) set to `true` and
+`fieldToggles` set to `false`, **all** v1 operations return 200: `SearchTimeline` (POST),
+`TweetDetail`, `UserByScreenName`, `UserTweets`, `TweetResultByRestId`, `ExplorePage`,
+`GenericTimelineById`, `Viewer`. Explore tabs (`for_you`, `trending`, `news`, `sports`,
+`entertainment`) come from `ExplorePage.body.timelines[].timeline.id` and are fetched with
+`GenericTimelineById` — **trends and news come from the API; DOM is fallback only.** `Viewer` returns
+the logged-in handle (login detection without English text). Response notes: `user.legacy` is
+empty in current payloads (use `user.core`, `relationship_counts`, `profile_bio`, `verification`);
+`tweet.legacy.entities` is often empty (derive hashtags/mentions from text; URLs from
+`note_tweet` entity set when present); long posts live in `note_tweet`.
+
+Adopted from Scweet / twscrape / twikit / opencli / twitter-cli (v1):
+- Per-op `features`/`fieldToggles` extraction from bundle (anchored to `operationName`).
+- Explore tabs via `GenericTimelineById` (+ `tab` param: trending|news|sports|entertainment).
+- `querySource:'trend_click'` when drilling into a trend.
+- Rate-limit headers (`x-rate-limit-*`) recorded per account; codes 88/429 → backoff+rotate;
+  326 → `account_locked`; 32 / 401 → `not_logged_in`.
+- Thread vs replies split in `x_tweet` (author self-replies = `thread`).
+- Extra filters: `to`, `mentions`, `verified_only`, `near`/`within`, `min_replies`.
+- Pagination stops after 3 consecutive empty pages; `next_cursor` returned in details and accepted as `cursor` input.
+- Page classifier in doctor (app / login wall / no-app).
+
+pi-x differentiators (v1): `x_trending` **drill-down** ("why is it trending": top posts, earliest
+high-engagement post, stats per trend), **"new since last check"** marking per location/tab,
+stats with **velocity (posts/hour)** and **verified share**, **near-duplicate collapse**, LLM-sized output.
+
+Later (v1.1+): lazy-chunk sweep for more ops (lists, bookmarks, retweeters, home feed),
+`AboutAccountQuery` authenticity, Community Notes, date-range splitting, twitter-openapi remote
+fallback, `x-client-transaction-id` if X starts enforcing it.
+
+Spec adjustments: legacy profile dirs are **referenced in place** (not moved) and tightened to 0700;
+legacy state files copied to the new state dir at 0600. Browser sessions are named `pix-<account>`;
+on first run, legacy sessions named after accounts are closed so the profile dir isn't locked.
+`ctx.ui.notify` levels are `info|warning|error` only.
