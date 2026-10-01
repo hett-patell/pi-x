@@ -73,7 +73,7 @@ export async function runDoctor(deps: ToolDeps, signal?: AbortSignal, progress?:
 				if (!report.api) {
 					const d = await deps.locks.run(a.name, () => deps.engine.discover(a, { signal }));
 					if (!d) {
-						report.api = { ok: false, ops_found: 0, missing: REQUIRED_OPS, bearer: false };
+						report.api = { ok: false, ops_found: 0, missing: [...REQUIRED_OPS], bearer: false };
 					} else {
 						const missing = REQUIRED_OPS.filter((op) => !d.ops.includes(op));
 						report.api = { ok: d.bearer && d.ct0 && !missing.length, ops_found: d.ops.length, missing, bearer: d.bearer };
