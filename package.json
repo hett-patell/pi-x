@@ -1,6 +1,6 @@
 {
   "name": "pi-x-insights",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scrape & analyze X (Twitter) with Pi — multi-account browser scraping, free single-tweet fetch, SocialData search, and AI-synthesized insights.",
   "keywords": [
     "pi-package",

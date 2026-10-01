@@ -1,6 +1,8 @@
 # 🐦 pi-x-insights
 
-> Scrape & analyze **X (Twitter)** from inside [Pi](https://pi.dev) — multi-account browser scraping, free single-tweet fetch, and AI-synthesized insights. No $200/mo API required.
+> Scrape & analyze **X (Twitter)** from inside [Pi](https://pi.dev) — self-diagnosing, multi-account browser scraping, free single-tweet fetch, and AI-synthesized insights. No $200/mo API required.
+
+*Inspired by [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s multi-backend routing + `doctor` self-diagnostic — brought natively to Pi.*
 
 [![pi-package](https://img.shields.io/badge/pi-package-blueviolet?style=flat-square)](https://pi.dev/packages)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
@@ -18,6 +20,7 @@ so you don't need a paid X API tier.
 
 | Tool | Capability | Cost |
 |---|---|---|
+| `x_doctor()` | **Self-diagnostic** — which backends/accounts work + what to fix (run first) | Free |
 | `x_tweet(id_or_url)` | Fetch a single tweet — text, author, full engagement, hashtags, media, quote chain | **Free**, no key, no login |
 | `x_scrape_topic(query, max?, account?, type?)` | Scrape a topic from x.com with **multi-account rotation**, returns structured posts | **Free** (browser; needs `/x login`) |
 | `x_search(query, max_results?, type?)` | Keyword search → clean JSON | Freemium ([SocialData.tools](https://socialdata.tools)) |
@@ -89,8 +92,11 @@ Then just ask your agent in plain English:
 | Command | What it does |
 |---|---|
 | `/x` | Status overview (tools, key, accounts, CLI presence) |
+| `/x doctor [--json]` | **Self-diagnostic** — which backends/accounts work + fixes |
 | `/x setkey <key>` · `/x clearkey` | Manage the SocialData API key |
 | `/x account add <name>` · `remove` · `list` · `active <name>` | Multi-account management |
+| `/x account chrome <name>` | Reuse your desktop Chrome's login (skip `/x login`) |
+| `/x account proxy <name> <url>` · `/x account noproxy <name>` | Per-account proxy (for IP-blocked X) |
 | `/x login [account] [google\|apple\|password\|manual]` | Log in an account (headed browser) |
 | `/x login check [account]` · `/x login clear` | Verify auth / clear login-method pref |
 | `/x state save\|restore\|list [account]` | Back up / restore auth (cookies + storage) |

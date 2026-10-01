@@ -68,6 +68,7 @@ interface XAccount {
 	name: string;
 	profile?: string;
 	enabled?: boolean;
+	proxy?: string;
 }
 
 interface XConfig {
@@ -142,7 +143,8 @@ async function touchSession(acct: XAccount): Promise<CliResult> {
 
 /** Launch flags: pin a fresh/relaunched browser to this account's persistent profile + session. */
 function launchArgs(acct: XAccount): string[] {
-	return ["--session", acct.name, "--profile", acct.profile ?? defaultProfile(acct.name)];
+	const base = ["--session", acct.name, "--profile", acct.profile ?? defaultProfile(acct.name)];
+	return acct.proxy ? [...base, "--proxy", acct.proxy] : base;
 }
 
 /** Reuse flags: target the already-running session.
@@ -253,8 +255,11 @@ const SQLITE3 = findSqlite3();
  */
 async function isLoggedIn(acct: XAccount): Promise<boolean> {
 	if (!SQLITE3) return true;
-	const db = join(acct.profile ?? defaultProfile(acct.name), "Default", "Cookies");
-	if (!existsSync(db)) return false;
+	const profileDir = acct.profile ?? defaultProfile(acct.name);
+	const db = join(profileDir, "Default", "Cookies");
+	// A managed profile (under PROFILES_DIR) with no DB = never logged in → false (deprioritize).
+	// A non-managed profile (e.g. Chrome's "Default" reuse, or a custom path) we can't inspect → assume yes.
+	if (!existsSync(db)) return profileDir.startsWith(PROFILES_DIR) ? false : true;
 	const tmpDir = join(homedir(), ".pi", "x-insights", ".tmp");
 	mkdirSync(tmpDir, { recursive: true });
 	const tmp = join(tmpDir, `cookies-${acct.name}.db`);
@@ -270,6 +275,60 @@ async function isLoggedIn(acct: XAccount): Promise<boolean> {
 	} catch {
 		return true;
 	}
+}
+
+// --- Doctor: self-diagnostic (à la agent-reach) ---------------------------
+
+type DocStatus = "ok" | "warn" | "error";
+interface DocCheck { status: DocStatus; message: string; fix?: string }
+interface DocAccount { name: string; active: boolean; logged_in: boolean; profile: string; proxy?: string }
+interface DoctorReport { checked_at: string; checks: Record<string, DocCheck>; accounts: DocAccount[] }
+
+async function doctorX(cfg: XConfig): Promise<DoctorReport> {
+	const checks: Record<string, DocCheck> = {};
+	const ab = findAgentBrowser();
+	checks.agent_browser = ab
+		? { status: "ok", message: `found: ${ab}` }
+		: { status: "error", message: "agent-browser CLI not found", fix: "Install Pi's agent-browser capability (pi-agent-browser-native)" };
+	checks.sqlite3 = SQLITE3
+		? { status: "ok", message: "found" }
+		: { status: "warn", message: "not found; login-state detection in /x accounts is degraded (scrapes still work)" };
+	try {
+		const t = await fetchTweetSyndication("20");
+		checks.syndication = t
+			? { status: "ok", message: "free single-tweet fetch works (x_tweet, no key)" }
+			: { status: "error", message: "syndication returned no tweet for id 20" };
+	} catch (e: any) {
+		checks.syndication = { status: "error", message: `tweet fetch failed: ${e?.message ?? e}` };
+	}
+	const key = cfg.socialdataApiKey?.trim();
+	checks.socialdata = key
+		? { status: "ok", message: `key set (${key.slice(0, 4)}…${key.slice(-4)})` }
+		: { status: "warn", message: "no key; x_search/x_user fall back to the browser path", fix: "/x setkey <key>  (free credits: https://socialdata.tools/signup)" };
+	const accounts: DocAccount[] = [];
+	for (const a of getAccounts(cfg)) {
+		let li = true;
+		try { li = await isLoggedIn(a); } catch { li = true; }
+		accounts.push({ name: a.name, active: a.name === cfg.active, logged_in: li, profile: a.profile ?? defaultProfile(a.name), proxy: a.proxy });
+	}
+	return { checked_at: new Date().toISOString(), checks, accounts };
+}
+
+const DOC_ICON: Record<DocStatus, string> = { ok: "✅", warn: "⚠️", error: "❌" };
+
+function doctorToText(r: DoctorReport): string {
+	const lines = [`X Insights — doctor  (${r.checked_at})`, "──────────────────────────────────────"];
+	for (const [k, c] of Object.entries(r.checks)) {
+		lines.push(`${DOC_ICON[c.status]} ${k.padEnd(14)} ${c.message}${c.fix ? `\n      → fix: ${c.fix}` : ""}`);
+	}
+	lines.push("", "Accounts:");
+	for (const a of r.accounts) {
+		lines.push(`  ${a.active ? "★ " : "  "}${a.name}  ${a.logged_in ? "✅ logged in" : "❌ not logged in"}${a.proxy ? `  proxy:${a.proxy}` : ""}`);
+	}
+	const ok = Object.values(r.checks).filter((c) => c.status === "ok").length;
+	const li = r.accounts.filter((a) => a.logged_in).length;
+	lines.push("", `Summary: ${ok}/${Object.keys(r.checks).length} backends ok · ${li}/${r.accounts.length} accounts logged in.`);
+	return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -932,13 +991,34 @@ export default function xInsightsExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	// ---- x_doctor: self-diagnostic (agent-reach-style) ----------------------
+	pi.registerTool({
+		name: "x_doctor",
+		label: "X: Doctor",
+		description:
+			"Self-diagnose the X extension: which backends work (agent-browser, sqlite3, free " +
+				"syndication feed, SocialData key), which accounts are logged in, and exactly what to " +
+				"fix. Run this before scraping if anything seems off, or to pick the best backend. " +
+				"Returns a structured report (and a human summary).",
+		promptSnippet: "x_doctor() — health-check all X backends + account login state. Run first when unsure.",
+		promptGuidelines: [
+			"Run x_doctor before a scrape if status is uncertain; it reports which backends/accounts are ready and what to fix.",
+			"Use the report to choose a backend: syndication for single tweets, SocialData for search (if ok), browser scraping otherwise (needs a logged-in account).",
+		],
+		parameters: Type.Object({}),
+		async execute() {
+			const r = await doctorX(loadConfig());
+			return { content: [{ type: "text", text: doctorToText(r) }], details: r };
+		},
+	});
+
 	// ===========================================================================
 	// /x command: status, SocialData key, multi-account + login
 	// ===========================================================================
 	pi.registerCommand("x", {
 		description:
-			"X Insights: status, SocialData key, multi-account, login + auth persistence. " +
-			"Usage: /x | /x setkey <key> | /x clearkey | /x account add|remove|list|active <name> | " +
+			"X Insights: status, doctor, SocialData key, multi-account, login + auth persistence. " +
+			"Usage: /x | /x doctor [--json] | /x setkey <key> | /x clearkey | /x account add|remove|list|active|chrome|proxy|noproxy <name> [url] | " +
 			"/x login [account] [manual|password|google|apple] | /x login check [account] | /x login clear | " +
 			"/x state save|restore|list [account] | /x keepalive [account]",
 		handler: async (args, ctx) => {
@@ -1043,8 +1123,39 @@ export default function xInsightsExtension(pi: ExtensionAPI) {
 					ctx.ui.notify(`✓ Active account set to "${name}"`, "success");
 					return;
 				}
+				if (sub === "chrome") {
+					// Reuse the desktop Chrome "Default"-profile login (skip /x login). Close Chrome first to avoid a profile lock.
+					if (!name) { ctx.ui.notify("Usage: /x account chrome <name>", "warning"); return; }
+					const cfg = loadConfig();
+					const accts = getAccounts(cfg).map(({ enabled, ...a }) => a);
+					const a = accts.find((x) => x.name === name);
+					if (!a) { ctx.ui.notify(`No account "${name}". Add it: /x account add ${name}`, "warning"); return; }
+					a.profile = "Default";
+					cfg.accounts = accts;
+					saveConfig(cfg);
+					ctx.ui.notify(`✓ "${name}" now reuses Chrome's Default profile (close Chrome before scraping to avoid a lock)`, "success");
+					return;
+				}
+				if (sub === "proxy" || sub === "noproxy") {
+					if (!name) { ctx.ui.notify(`Usage: /x account proxy <name> <url>  |  /x account noproxy <name>`, "warning"); return; }
+					const cfg = loadConfig();
+					const accts = getAccounts(cfg).map(({ enabled, ...a }) => a);
+					const a = accts.find((x) => x.name === name);
+					if (!a) { ctx.ui.notify(`No account "${name}"`, "warning"); return; }
+					if (sub === "proxy") {
+						const url = restArgs[1];
+						if (!url) { ctx.ui.notify("Usage: /x account proxy <name> <url>", "warning"); return; }
+						a.proxy = url;
+					} else {
+						delete a.proxy;
+					}
+					cfg.accounts = accts;
+					saveConfig(cfg);
+					ctx.ui.notify(sub === "proxy" ? `✓ "${name}" proxy set to ${a.proxy}` : `✓ cleared proxy for "${name}"`, "success");
+					return;
+				}
 				ctx.ui.notify(
-					"Usage: /x account add <name> | /x account remove <name> | /x account active <name> | /x account list",
+					"Usage: /x account add|remove|list|active|chrome|proxy|noproxy <name> [proxy-url]",
 					"warning",
 				);
 				return;
@@ -1146,6 +1257,13 @@ export default function xInsightsExtension(pi: ExtensionAPI) {
 				return;
 			}
 
+			// /x doctor [--json] — self-diagnostic (which backends/accounts work + fixes)
+			if (arg === "doctor" || arg.startsWith("doctor")) {
+				const r = await doctorX(cfg0);
+				ctx.ui.notify(/\bjson\b/i.test(arg) ? JSON.stringify(r, null, 2) : doctorToText(r), "info");
+				return;
+			}
+
 			// /x state save|restore|list [account] — explicit auth backup (cookies + localStorage + sessionStorage)
 			if (arg.startsWith("state ")) {
 				const rest = arg.slice(6).trim();
@@ -1221,7 +1339,7 @@ export default function xInsightsExtension(pi: ExtensionAPI) {
 			// /x [status]
 			if (arg && arg !== "status") {
 				ctx.ui.notify(
-					"Usage: /x | /x setkey <key> | /x clearkey | /x account add|remove|list|active <name> | " +
+					"Usage: /x | /x doctor [--json] | /x setkey <key> | /x clearkey | /x account add|remove|list|active|chrome|proxy|noproxy <name> [url] | " +
 						"/x login [account] [manual|password|google|apple] | /x login check [account] | /x login clear | " +
 						"/x state save|restore|list [account] | /x keepalive [account]",
 					"warning",
@@ -1252,7 +1370,7 @@ export default function xInsightsExtension(pi: ExtensionAPI) {
 				"  • x_user          — profile lookup (SocialData)[" + (key ? "key set" : "needs key") + "]",
 				"  • x_scrape_topic  — scrape a topic from x.com   [FREE, multi-account browser]",
 				"",
-				"Commands: /x account add <name> | /x login <account> <method> | /x login check <account> | /x state save|restore <account> | /x keepalive <account> | /x setkey <key>",
+				"Commands: /x doctor | /x account add|chrome|proxy <name> | /x login <account> <method> | /x login check <account> | /x state save|restore <account> | /x keepalive <account> | /x setkey <key>",
 			];
 			ctx.ui.notify(lines.join("\n"), "info");
 		},

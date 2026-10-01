@@ -1,64 +1,85 @@
 ---
 name: x-insights
-description: Scrape and analyze X (Twitter) — fetch tweets, scrape topics by keyword with multi-account browser rotation, look up profiles, and synthesize insights (sentiment, themes, top voices, engagement).
+description: >
+  MUST USE when the user wants data or analysis from X / Twitter — trending
+  topics, keyword/topic scraping, a specific tweet's engagement, a user
+  profile, or sentiment/insights synthesized from posts. Also when the user
+  shares an x.com / twitter.com URL. Multi-backend routing (free syndication
+  feed / SocialData / authenticated browser), multi-account rotation.
 ---
 
-# X (Twitter) Insights
+# X (Twitter) Insights — internet-eyes for X, à la Agent-Reach
 
-Use this skill when the user wants data or analysis **from X / Twitter**: trending
-topics, keyword/topic scraping, a specific tweet's engagement, a user profile, or
-sentiment/insights synthesized from posts.
+Read & search X with **zero API fees**: free single-tweet fetch, multi-account
+browser scraping, optional SocialData search, and AI-synthesized insights.
 
-## Tools available
+## 0. Doctor first (like Agent-Reach)
 
-- **`x_tweet(id_or_url)`** — fetch a single tweet (text, author, full engagement,
-  hashtags, media, quote chain). **Free**, no key, no login. Use whenever the user
-  references a tweet URL or ID.
-- **`x_scrape_topic(query, max?, account?, type?)`** — scrape a topic from x.com
-  using Pi's browser with **multi-account rotation**. **Free** (no API key) but each
-  account must be logged in once (`/x login`). Returns structured posts (author,
-  text, engagement, time, URL). x.com search operators work: `from:user`,
-  `since:`, `until:`, `#tag`, `-filter:retweets`, `min_faves:`, `OR`.
-- **`x_search(query, max_results?, type?)`** — keyword search via SocialData.tools
-  (freemium, structured JSON). Use when a SocialData key is set (`/x setkey`).
-- **`x_user(username)`** — public profile lookup (followers, bio, join date,
-  verification). Needs a SocialData key.
+Before any scrape when status is uncertain, run **`x_doctor`**. It reports which
+backends are ready (`agent_browser`, `sqlite3`, `syndication`, `socialdata`),
+which accounts are logged in, and exactly what to fix. Use its output to pick the
+backend; don't guess.
 
-## Decision guide
+```
+x_doctor()   → ✅ agent_browser ✅ sqlite3 ✅ syndication ⚠️ socialdata  · accounts: default ✅
+```
 
-- Specific tweet URL/ID → `x_tweet` (always; free).
-- Topic/keyword scrape, no key → `x_scrape_topic`. Ensure accounts are logged in
-  (`/x login`); the tool rotates across logged-in accounts automatically.
-- Topic/keyword search, key set → `x_search` (cleaner JSON than scraping).
-- Author/audience context → `x_user`.
+## Routing table (pick the first backend that's ready)
+
+| User intent | Primary | Fallback |
+|---|---|---|
+| Specific tweet URL/ID | `x_tweet` (free syndication) | SocialData, then browser |
+| Topic/keyword, no key | `x_scrape_topic` (browser, multi-account) | — |
+| Topic/keyword, SocialData ok | `x_search` (clean JSON) | `x_scrape_topic` |
+| Author/profile | `x_user` (SocialData) | browser open of the profile |
+| Health check / "is it working?" | `x_doctor` | — |
+
+## Tools
+
+- **`x_tweet(id_or_url)`** — fetch one tweet: text, author, full engagement, hashtags,
+  media, quote chain. **Free**, no key, no login.
+- **`x_scrape_topic(query, max?, account?, type?)`** — scrape a topic from x.com with
+  **multi-account rotation + fallback**. **Free** (each account needs `/x login` once).
+  x.com operators: `from:user`, `since:`, `until:`, `#tag`, `-filter:retweets`,
+  `min_faves:`, `OR`.
+- **`x_search(query, max_results?, type?)`** — keyword search via SocialData (freemium).
+- **`x_user(username)`** — profile lookup (SocialData).
+- **`x_doctor()`** — self-diagnostic; run first when unsure.
 
 ## Synthesizing insights
 
-After fetching, **don't just list posts**. Synthesize:
-- **Volume/hype** — how much discussion, growth.
-- **Sentiment split** — bullish/bearish, pro/con, emotional tone.
-- **Recurring themes** — cluster the conversation.
-- **Top voices** — by engagement (likes/retweets) and reach (verified, followers).
-- **Notable quotes** — with their X URLs.
-- **Timeline/spread** — is it peaking, sustained, fading?
+Don't just list posts. Synthesize: **volume/hype**, **sentiment split**,
+**recurring themes**, **top voices by engagement/reach**, **notable quotes (with
+URLs)**, **timeline/spread**.
 
-## Setup (one-time)
+## Setup
 
 ```
-/x login default google     # log in an X account in a headed browser
-/x login check default       # verify
-/x setkey <key>              # optional: SocialData key for x_search/x_user
+/x login default google        # log in an account (headed browser; Google/Apple/email+2FA)
+/x account add burner          # add more for rotation
+/x account chrome default      # OR reuse your desktop Chrome's login (skip /x login)
+/x account proxy default http://host:port   # optional: for IP-blocked servers
+/x setkey <key>                 # optional: SocialData key → x_search/x_user
 ```
 
 ## Commands
 
-`/x` status · `/x setkey <key>` · `/x account add|remove|list|active <name>` ·
+`/x` status · `/x doctor [--json]` · `/x setkey <key>` ·
+`/x account add|remove|list|active|chrome|proxy|noproxy <name> [url]` ·
 `/x login [account] [google|apple|password|manual]` · `/x login check [account]` ·
 `/x state save|restore|list [account]` · `/x keepalive [account]`
 
+## Retry chain (when a scrape fails)
+
+1. `x_doctor` → confirm a logged-in account exists.
+2. `x_scrape_topic` auto-rotates to the next logged-in account on a wall/block.
+3. Still failing? `/x login <account>` (or `/x account chrome <name>` to reuse Chrome),
+   then `/x keepalive <account>`, then retry.
+4. Last resort: `/x setkey <key>` and use `x_search` (structured, no browser).
+
 ## Reality check
 
-The official X API has **no free search tier** (free = posting only). This package
-uses the genuinely free syndication feed for single tweets, and routes
-search/profiles through either **SocialData.tools** (freemium) or **authenticated
-browser scraping** (free, multi-account) — the practical free routes.
+Official X API has **no free search tier**. This uses the free syndication feed for
+single tweets, and routes search/profiles through **SocialData** (freemium) or
+**authenticated browser sessions** you control (free, multi-account) — the practical
+free routes. Reads public data only; never posts on your behalf.
