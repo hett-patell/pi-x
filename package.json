@@ -1,37 +1,26 @@
 {
   "name": "pi-x",
-  "version": "0.2.0",
-  "description": "Scrape & analyze X (Twitter) with Pi — multi-account browser scraping, free single-tweet fetch, SocialData search, and AI-synthesized insights.",
-  "keywords": [
-    "pi-package",
-    "pi",
-    "pi-coding-agent",
-    "twitter",
-    "x",
-    "scraper",
-    "ai-agent",
-    "browser-automation",
-    "social-listening"
-  ],
+  "version": "1.0.0-dev",
+  "description": "X (Twitter) for Pi agents — trending topics & news with 'why it's trending' drill-down, search, threads, profiles. No API keys: uses your logged-in browser session.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "pi-coding-agent", "pi-extension", "twitter", "x", "trending", "scraper", "ai-agent", "social-listening"],
   "license": "MIT",
   "author": "Het Patel <hetworkshard@gmail.com>",
-  "repository": {
-    "type": "git",
-    "url": "github:hett-patell/pi-x"
-  },
+  "repository": { "type": "git", "url": "github:hett-patell/pi-x" },
   "homepage": "https://github.com/hett-patell/pi-x",
   "bugs": "https://github.com/hett-patell/pi-x/issues",
-  "files": [
-    "extensions",
-    "skills",
-    "README.md",
-    "LICENSE"
-  ],
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-ai": "*"
+  "files": ["extensions", "skills", "README.md", "CHANGELOG.md", "LICENSE"],
+  "pi": { "extensions": ["extensions/pi-x/index.ts"], "skills": ["skills"] },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "check": "tsc -p .",
+    "smoke": "node scripts/smoke.ts"
   },
-  "engines": {
-    "pi": ">=0.87"
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-ai": "*" },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
   }
 }
