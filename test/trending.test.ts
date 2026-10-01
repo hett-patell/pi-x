@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { saveConfig } from "../extensions/pi-x/config.ts";
 import { XError } from "../extensions/pi-x/errors.ts";
+import { OUTPUT_BUDGET } from "../extensions/pi-x/format.ts";
 import { runTrending } from "../extensions/pi-x/tools/trending.ts";
 import { fakeDeps } from "./helpers.ts";
 
@@ -67,4 +68,39 @@ test("tab=news returns stories as the main list", async () => {
 	const out = await runTrending(deps, { tab: "news" });
 	assert.match(out.text, /News — account "default" Explore/);
 	assert.match(out.text, / 1\. Google DeepMind/);
+});
+
+test("drill-down text stays within OUTPUT_BUDGET even when per-trend content is huge", async () => {
+	const hugeHashtag = "z".repeat(20_000);
+	const bigTweet = {
+		data: {
+			entries: [
+				{
+					tweet_results: {
+						result: {
+							__typename: "Tweet",
+							rest_id: "9001",
+							core: { user_results: { result: { __typename: "User", core: { screen_name: "bigposter", name: "Big Poster" }, rest_id: "9001" } } },
+							legacy: {
+								id_str: "9001",
+								full_text: `huge trend content #${hugeHashtag}`,
+								created_at: "Wed Oct 01 00:00:00 +0000 2026",
+								favorite_count: 10,
+								retweet_count: 1,
+								reply_count: 1,
+								quote_count: 0,
+								bookmark_count: 0,
+							},
+							views: { count: "100" },
+						},
+					},
+				},
+			],
+		},
+	};
+	const deps = fakeDeps({ graphql: (op, v) => (op === "SearchTimeline" ? bigTweet : gql(op, v)) });
+	const out = await runTrending(deps, { drilldown: 5, include_news: false });
+	assert.ok(Buffer.byteLength(out.text) <= OUTPUT_BUDGET, `text was ${Buffer.byteLength(out.text)} bytes`);
+	assert.match(out.text, /more omitted to save context/);
+	assert.equal((out.details.drilldown as unknown[]).length, 5);
 });

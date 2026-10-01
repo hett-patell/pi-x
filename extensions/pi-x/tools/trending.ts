@@ -1,7 +1,7 @@
 import type { Account } from "../config.ts";
 import { domTrends } from "../dom.ts";
 import { toXError, XError } from "../errors.ts";
-import { formatStats, formatTrends, formatTweet } from "../format.ts";
+import { fitToBudget, formatStats, formatTrends, formatTweet } from "../format.ts";
 import { matchLocation, parseExploreTabs, parsePlaceTrends, parseTrendTimeline, type Place, suggestLocations, type Trend } from "../normalize.ts";
 import { collapseDuplicates, computeStats, scoreAll, type Stats } from "../score.ts";
 import { clamp } from "../util.ts";
@@ -89,7 +89,7 @@ export async function runTrending(deps: ToolDeps, p: TrendingParams, signal?: Ab
 		const drill: Drill[] = [];
 		for (const t of trends.slice(0, drillN)) {
 			progress?.(`why is "${t.name}" trending? sampling top posts…`);
-			const r = await searchTweets(deps, a, t.query, { product: "Top", limit: 20, querySource: "trend_click", signal });
+			const r = await searchTweets(deps, a, t.query, { product: "Top", limit: 20, querySource: "trend_click", signal, progress });
 			const { kept, duplicates } = collapseDuplicates(scoreAll(r.tweets));
 			drill.push({ trend: t.name, query: t.query, stats: computeStats(kept, duplicates) });
 		}
@@ -98,19 +98,21 @@ export async function runTrending(deps: ToolDeps, p: TrendingParams, signal?: Ab
 
 	markNew(deps.trendMemory, `${value.where}|${tab}`, value.trends);
 	const title = `${tab === "trending" ? "Trending" : tab[0].toUpperCase() + tab.slice(1)} — ${value.where}${value.engine === "dom" ? " [page-scrape fallback]" : ""}${skipped.length ? ` (skipped ${skipped.join(", ")})` : ""}`;
-	const parts = [formatTrends(title, value.trends)];
-	if (value.news.length) parts.push(formatTrends("News & stories", value.news));
+	const headParts = [formatTrends(title, value.trends)];
+	if (value.news.length) headParts.push(formatTrends("News & stories", value.news));
+	const items: string[] = [];
 	if (value.drill.length) {
-		parts.push(
-			`Why it's trending (top posts per trend):\n\n${value.drill
-				.map((d) => [`▸ ${d.trend} — ${d.stats.count} posts sampled`, formatStats(d.stats), ...d.stats.top.slice(0, 3).map((t, i) => formatTweet(t, i + 1))].join("\n"))
-				.join("\n\n")}`,
-		);
+		headParts.push("Why it's trending (top posts per trend):");
+		for (const d of value.drill) {
+			items.push([`▸ ${d.trend} — ${d.stats.count} posts sampled`, formatStats(d.stats), ...d.stats.top.slice(0, 3).map((t, i) => formatTweet(t, i + 1))].join("\n"));
+		}
 	} else if (value.trends.length) {
-		parts.push('Tip: pass drilldown: 3 to sample top posts for the top trends, or call x_search with a trend\'s query (type: "Top").');
+		items.push('Tip: pass drilldown: 3 to sample top posts for the top trends, or call x_search with a trend\'s query (type: "Top").');
 	}
+	// Whole drill-down blocks are dropped (with an omitted note) rather than truncated mid-way.
+	const { text } = fitToBudget(headParts.join("\n\n"), items);
 	return {
-		text: parts.join("\n\n"),
+		text,
 		details: {
 			account: account.name,
 			where: value.where,
