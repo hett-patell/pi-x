@@ -134,24 +134,56 @@ async function pickAccount(deps: ToolDeps, ui: CommandUI, arg: string | undefine
 	return ui.select(`${verb[0].toUpperCase()}${verb.slice(1)} which X account?`, cfg.accounts.map((a) => a.name));
 }
 
+/** One login watcher per account (per deps): a new /x login cancels the previous one. */
+const loginWatchers = new WeakMap<ToolDeps, Map<string, AbortController>>();
+
+function cancelLoginWatch(deps: ToolDeps, name: string): void {
+	loginWatchers.get(deps)?.get(name.toLowerCase())?.abort();
+}
+
 function watchLogin(deps: ToolDeps, ui: CommandUI, name: string): Promise<void> {
 	const a = findAccount(readConfig(deps), name);
 	if (!a) return Promise.resolve();
+	const byName = loginWatchers.get(deps) ?? new Map<string, AbortController>();
+	loginWatchers.set(deps, byName);
+	const key = a.name.toLowerCase();
+	byName.get(key)?.abort();
+	const ctl = new AbortController();
+	byName.set(key, ctl);
+	const { signal } = ctl;
+	/** One poll under the account lock: never relaunches a browser the user closed. */
+	const poll = async (): Promise<{ closed?: true; handle?: string } | null> => {
+		if (signal.aborted) return null;
+		if (!(await deps.sessions.list(signal).catch(() => [] as string[])).includes(sessionName(a))) return { closed: true };
+		const v = await deps.engine.viewer(a, { signal }).catch(() => null);
+		if (!v || signal.aborted) return null;
+		updateAccount(deps.paths, a.name, { handle: v.handle });
+		await deps.sessions.close(a);
+		return { handle: v.handle };
+	};
 	return (async () => {
 		const deadline = deps.now() + 5 * 60_000;
 		for (let first = true; first || deps.now() < deadline; first = false) {
-			await deps.sleep(3000);
-			const v = await deps.engine.viewer(a).catch(() => null);
-			if (v) {
-				updateAccount(deps.paths, a.name, { handle: v.handle });
-				ui.say(`✓ "${a.name}" connected as @${v.handle}. Closing the login window — tools will reuse this session in the background.`);
-				await deps.sessions.close(a);
+			await deps.sleep(3000, signal).catch(() => undefined);
+			if (signal.aborted) return;
+			const r = await deps.locks.run(a.name, poll);
+			if (r?.handle) {
+				ui.say(`✓ "${a.name}" connected as @${r.handle}. Closed the login window — tools will reuse this session in the background.`);
 				ui.setStatus(footerText(readConfig(deps)));
+				return;
+			}
+			if (signal.aborted) return;
+			if (r?.closed) {
+				ui.say(`Login window closed — run /x login ${a.name} to retry.`);
 				return;
 			}
 		}
 		ui.say(`✗ Login for "${a.name}" not detected within 5 minutes. Run /x login ${a.name} to try again.`, "warning");
-	})().catch((e) => ui.say(`✗ Login watcher failed: ${toXError(e).message}`, "error"));
+	})()
+		.catch((e) => ui.say(`✗ Login watcher failed: ${toXError(e).message}`, "error"))
+		.finally(() => {
+			if (byName.get(key) === ctl) byName.delete(key);
+		});
 }
 
 export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): Promise<void> {
@@ -271,6 +303,7 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 				const name = await pickAccount(deps, ui, cmd.args.find((x) => !LOGIN_METHOD_WORDS.has(x.toLowerCase())), "login");
 				if (!name) return;
 				const a = findAccount(readConfig(deps), name)!;
+				cancelLoginWatch(deps, a.name);
 				await deps.locks.run(a.name, async () => {
 					await deps.sessions.close(a);
 					await deps.sessions.launch(a, { headed: true, url: "https://x.com/i/flow/login" });

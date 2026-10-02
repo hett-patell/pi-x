@@ -95,8 +95,10 @@ test("logout without a UI explains instead of returning silently", async () => {
 	assert.equal(loadConfig(deps.paths).config.accounts[0].handle, "me");
 });
 
+const tick = () => new Promise((r) => setTimeout(r, 10));
+
 test("login opens headed browser and confirms the handle in the background", async () => {
-	const deps = fakeDeps({ viewer: () => ({ id: "1", handle: "fresh" }) });
+	const deps = fakeDeps({ viewer: () => ({ id: "1", handle: "fresh" }), sessions: () => ["pix-default"] });
 	const u = ui();
 	await runCommand("login", deps, u);
 	await new Promise((r) => setTimeout(r, 10));
@@ -109,4 +111,43 @@ test("removed SocialData commands explain themselves", async () => {
 	const u = ui();
 	await runCommand("setkey abc", fakeDeps(), u);
 	assert.match(u.said[0], /SocialData support was removed/);
+});
+
+test("a second /x login cancels the first login watcher", async () => {
+	let viewerCalls = 0;
+	const deps = fakeDeps({ viewer: () => (viewerCalls++, { id: "1", handle: "fresh" }), sessions: () => ["pix-default"] });
+	const wake: (() => void)[] = [];
+	deps.sleep = () => new Promise<void>((r) => { wake.push(r); });
+	const u = ui();
+	await runCommand("login", deps, u);
+	await runCommand("login", deps, u);
+	await tick();
+	for (const r of wake.splice(0)) r();
+	await tick();
+	assert.equal(viewerCalls, 1);
+	assert.equal(u.said.filter((t) => /connected as @fresh/.test(t)).length, 1);
+});
+
+test("login watcher stops quietly when the login window was closed", async () => {
+	let viewerCalls = 0;
+	const deps = fakeDeps({ viewer: () => (viewerCalls++, null), sessions: () => [] });
+	const u = ui();
+	await runCommand("login", deps, u);
+	await tick();
+	assert.equal(viewerCalls, 0);
+	assert.match(u.said.at(-1)!, /login window closed — run \/x login default to retry/i);
+	assert.ok(!deps.calls.some((c) => c.startsWith("close:")) || deps.calls.filter((c) => c === "close:default").length === 1);
+});
+
+test("login watcher gives up after 5 minutes with a warning", async () => {
+	let t = 0;
+	let polls = 0;
+	const deps = fakeDeps({ viewer: () => (polls++, null), sessions: () => ["pix-default"] });
+	deps.now = () => (t += 60_000);
+	const u = ui();
+	await runCommand("login", deps, u);
+	await tick();
+	assert.ok(polls >= 1 && polls < 10, `polled ${polls} times`);
+	assert.match(u.said.at(-1)!, /not detected within 5 minutes/);
+	assert.equal(u.levels.at(-1), "warning");
 });

@@ -11,6 +11,8 @@ export interface FakeHandlers {
 	dom?: (fn: string) => unknown;
 	viewer?: (account: string) => { id: string; handle: string } | null;
 	fetch?: (url: string) => { status: number; body: string };
+	/** Running browser session names (default: none). */
+	sessions?: () => string[];
 }
 
 export function fakeDeps(h: FakeHandlers = {}, cfg?: Config): ToolDeps & { calls: string[] } {
@@ -32,7 +34,7 @@ export function fakeDeps(h: FakeHandlers = {}, cfg?: Config): ToolDeps & { calls
 		sessions: {
 			ensure: async () => {}, open: async (_a, url) => { calls.push(`open:${url}`); }, scroll: async () => {}, launch: async () => {},
 			close: async (a) => { calls.push(`close:${a.name}`); }, closeAll: async () => { calls.push("closeAll"); }, closeByName: async () => {},
-			list: async () => [], saveState: async () => {}, loadState: async () => {},
+			list: async () => (h.sessions ? h.sessions() : []), saveState: async () => {}, loadState: async () => {},
 		},
 		locks: new AccountLocks(),
 		runner: async () => ok,
