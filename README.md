@@ -47,8 +47,8 @@ sampled live from X. No scraped HTML dump, no "I don't have access to real-time 
 - **Self-healing** — discovers X's internal API query IDs and features at runtime, and falls
   back to page-scraping when X changes something, instead of breaking outright.
 - **Multi-account rotation** — add several accounts; pi-x rotates and backs off on rate limits.
-- **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never reads
-  or stores `auth_token`/`ct0`.
+- **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never
+  extracts your cookies or sends them anywhere.
 - **Read-only** — no posting, liking, following, or DMing, ever.
 
 ## How pi-x compares
@@ -167,10 +167,17 @@ What's trending on X right now, and why?
 Account rotation is least-recently-used by default (`/x use <account>` to pin one); a per-account
 lock keeps two tools from fighting over the same browser tab.
 
+Running several Pi instances against the same X account at the same time isn't supported: the
+locks are per process, and exiting one Pi closes the pi-x browser sessions the others are using.
+
 ## Privacy & safety
 
-- Cookies and login state live only in the browser profile under `~/.pi/agent/pi-x/profiles`
-  (directories `0700`) — pi-x never extracts or stores `auth_token`/`ct0` itself.
+- Cookies stay in the browser profile under `~/.pi/agent/pi-x/profiles` (directories `0700`)
+  and are never extracted or sent anywhere by pi-x. The in-page code reads X's `ct0` CSRF token
+  inside the page only to authorize X's own requests, exactly as x.com does.
+- `/x backup` writes the account's login state (cookies included) to
+  `~/.pi/agent/pi-x/state/<account>.json` — `0600` inside a `0700` directory. Keep that file
+  private; anyone holding it can use your X session.
 - Config (`~/.pi/agent/pi-x/config.json`) is written `0600`.
 - Proxy credentials are masked in every message, log, and tool output.
 - All tools are read-only: no posting, liking, following, or DMing.
@@ -222,16 +229,22 @@ Project layout:
 
 ```
 extensions/pi-x/
-  index.ts        tool registration (x_trending, x_search, x_tweet, x_user, x_doctor)
-  commands.ts      /x command handling, SUBCOMMANDS, status footer
-  config.ts        config load/save, 0.x migration, account validation
-  accounts.ts      account lookup, proxy/secret masking
-  browser.ts       spawns agent-browser (only module that does)
+  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_doctor), /x wiring
+  commands.ts      /x command handling, SUBCOMMANDS, status footer, login watcher
+  deps.ts          builds the shared ToolDeps (lazy agent-browser runner, sessions, engine, locks)
+  config.ts        config load/save, 0.x migration, account validation, managed-profile check
+  accounts.ts      account lookup/rotation order, proxy/secret masking
+  browser.ts       spawns agent-browser (only module that does), sessions, per-account locks
   page.ts          page-side code (String.raw, runs inside the logged-in tab)
   xapi.ts          in-page X GraphQL engine + runtime query-ID discovery
   dom.ts           DOM-scrape fallback when the API engine can't be used
+  normalize.ts     parse X payloads into Tweet / XUser / Trend / Place
+  score.ts         engagement score, dedupe, search filters → query, stats
+  format.ts        compact text rendering + OUTPUT_BUDGET fitting
   errors.ts        XErrorCode, FIXES, XError
-  tools/           one module per tool (trending, search, tweet, user, doctor)
+  util.ts          clamp, unique, abortable sleep
+  tools/           context.ts (shared deps, account rotation, pagination) + one module per tool
+                   (trending, search, tweet, user, doctor)
 skills/pi-x/       SKILL.md — how an agent should route requests and write insights
 test/              unit tests + recorded fixtures
 scripts/smoke.ts   live smoke script (npm run smoke)
