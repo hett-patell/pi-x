@@ -97,6 +97,27 @@ export const missingRunner: Runner = async () => ({
 	aborted: false,
 });
 
+/**
+ * Runner that keeps looking for agent-browser until it is installed (no Pi restart needed),
+ * then caches the binary. `binary()` reports the current state.
+ */
+export function createLazyRunner(
+	resolve: () => BinarySpec | null = resolveBinary,
+	make: (spec: BinarySpec) => Runner = createRunner,
+): { runner: Runner; binary: () => BinarySpec | null } {
+	let spec: BinarySpec | null = null;
+	let inner: Runner = missingRunner;
+	const binary = () => {
+		if (!spec) {
+			spec = resolve();
+			if (spec) inner = make(spec);
+		}
+		return spec;
+	};
+	const runner: Runner = (args, opts) => (binary() ? inner(args, opts) : missingRunner(args, opts));
+	return { runner, binary };
+}
+
 export function classifyCliError(msg: string): XError {
 	if (/agent-browser CLI not found/i.test(msg)) return new XError("browser_missing", msg);
 	if (/ProcessSingleton|SingletonLock|profile (is )?(already )?in use|user data directory is already in use/i.test(msg)) {

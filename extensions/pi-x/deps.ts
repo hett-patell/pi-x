@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { AccountLocks, createRunner, missingRunner, resolveBinary, Sessions } from "./browser.ts";
+import { AccountLocks, createLazyRunner, Sessions } from "./browser.ts";
 import { paths } from "./config.ts";
 import type { ToolDeps } from "./tools/context.ts";
 import { abortableSleep } from "./util.ts";
@@ -7,8 +7,7 @@ import { Engine } from "./xapi.ts";
 
 export function createDeps(agentDir: string, legacyHome: string = homedir()): ToolDeps {
 	const p = paths(agentDir);
-	const binary = resolveBinary();
-	const runner = binary ? createRunner(binary) : missingRunner;
+	const { runner, binary } = createLazyRunner();
 	const sessions = new Sessions(runner, p);
 	return {
 		paths: p,
@@ -17,7 +16,9 @@ export function createDeps(agentDir: string, legacyHome: string = homedir()): To
 		sessions,
 		locks: new AccountLocks(),
 		runner,
-		binary,
+		get binary() {
+			return binary();
+		},
 		fetchFn: fetch,
 		sleep: abortableSleep,
 		random: Math.random,

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AccountLocks, classifyCliError, resolveBinary, Sessions, sessionName, type CliResult, type RunOptions } from "../extensions/pi-x/browser.ts";
+import { AccountLocks, type BinarySpec, classifyCliError, createLazyRunner, resolveBinary, Sessions, sessionName, type CliResult, type RunOptions } from "../extensions/pi-x/browser.ts";
 import { paths } from "../extensions/pi-x/config.ts";
+import { createDeps } from "../extensions/pi-x/deps.ts";
 
 const ok = (stdout = ""): CliResult => ({ ok: true, code: 0, stdout, stderr: "", timedOut: false, aborted: false });
 
@@ -95,4 +98,46 @@ test("closeAll only closes pix-* sessions", async () => {
 	const f = fakeRunner((args) => (args[0] === "session" ? ok(JSON.stringify({ success: true, data: { sessions: ["pix-a", "work", "pix-b"] } })) : ok()));
 	await new Sessions(f.run, paths("/a")).closeAll();
 	assert.deepEqual(f.calls.slice(1).map((c) => c.args.join(" ")), ["--session pix-a close", "--session pix-b close"]);
+});
+
+test("createLazyRunner re-resolves agent-browser until found, then caches it", async () => {
+	let spec: BinarySpec | null = null;
+	let resolves = 0;
+	const made: string[] = [];
+	const lazy = createLazyRunner(
+		() => { resolves++; return spec; },
+		(s) => { made.push(s.file); return async (args) => ok(`${s.file} ${args.join(" ")}`); },
+	);
+	assert.equal(lazy.binary(), null);
+	const missing = await lazy.runner(["--version"]);
+	assert.equal(missing.ok, false);
+	assert.match(missing.stderr, /agent-browser CLI not found/);
+	spec = { file: "/new/agent-browser", prefixArgs: [] };
+	const r = await lazy.runner(["--version"]);
+	assert.deepEqual([r.ok, r.stdout], [true, "/new/agent-browser --version"]);
+	assert.deepEqual(lazy.binary(), spec);
+	const before = resolves;
+	await lazy.runner(["x"]);
+	assert.equal(resolves, before);
+	assert.deepEqual(made, ["/new/agent-browser"]);
+});
+
+test("createDeps: deps.binary reflects an agent-browser installed after load", () => {
+	const dir = mkdtempSync(join(tmpdir(), "pix-"));
+	const saved = { PATH: process.env.PATH, PI_X_AGENT_BROWSER: process.env.PI_X_AGENT_BROWSER };
+	try {
+		process.env.PATH = "";
+		delete process.env.PI_X_AGENT_BROWSER;
+		const deps = createDeps(dir, dir);
+		const current = () => deps.binary;
+		assert.equal(current(), null);
+		const bin = join(dir, "agent-browser");
+		writeFileSync(bin, "");
+		process.env.PI_X_AGENT_BROWSER = bin;
+		assert.equal(current()?.file, bin);
+	} finally {
+		process.env.PATH = saved.PATH;
+		if (saved.PI_X_AGENT_BROWSER === undefined) delete process.env.PI_X_AGENT_BROWSER;
+		else process.env.PI_X_AGENT_BROWSER = saved.PI_X_AGENT_BROWSER;
+	}
 });
