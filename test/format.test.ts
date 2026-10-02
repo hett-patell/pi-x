@@ -13,6 +13,7 @@ const t: Tweet = {
 
 test("compact + oneLine", () => {
 	assert.deepEqual([compact(999), compact(1234), compact(12_345), compact(1_900_000), compact(null)], ["999", "1.2K", "12K", "1.9M", "–"]);
+	assert.deepEqual([compact(999_999), compact(999_500), compact(999_499), compact(999_999_999), compact(9_999), compact(-999_999)], ["1M", "1M", "999K", "1B", "10K", "-1M"]);
 	assert.equal(oneLine("a\n\n b   c"), "a b c");
 	assert.equal(oneLine("abcdef", 4), "abc…");
 });
@@ -41,4 +42,12 @@ test("formatStats / formatTrends / formatUser", () => {
 	const tr = formatTrends("Trending", [{ rank: 1, name: "#AI", category: "Tech · Trending", volume: 96000, query: "#AI", is_news: false, promoted: false, new: true }]);
 	assert.equal(tr, "Trending\n 1. #AI — Tech · Trending · 96K posts · NEW");
 	assert.match(formatUser({ id: "1", handle: "OpenAI", name: "OpenAI", verified: true, followers: 5410550, following: 4, posts: 2162, bio: "mission" }), /@OpenAI ✓ — OpenAI\nfollowers 5.4M · following 4 · posts 2.2K/);
+});
+
+test("formatStats shows sparse rates per day instead of 0/h", () => {
+	const mk = (id: string, created_at: string): Tweet => ({ ...t, id, created_at, quoted: undefined });
+	const sparse = formatStats(computeStats([mk("1", "2026-10-01T00:00:00.000Z"), mk("2", "2026-10-03T02:00:00.000Z")]));
+	assert.match(sparse, /2 posts over 50h \(~1\/day\)/);
+	const dense = formatStats(computeStats([mk("1", "2026-10-01T00:00:00.000Z"), mk("2", "2026-10-01T01:00:00.000Z"), mk("3", "2026-10-01T02:00:00.000Z")]));
+	assert.match(dense, /3 posts over 2h \(1\.5\/h\)/);
 });

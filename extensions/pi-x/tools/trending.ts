@@ -35,7 +35,11 @@ export function markNew(memory: Map<string, Set<string>>, key: string, trends: T
 }
 
 async function places(deps: ToolDeps, a: Account, signal?: AbortSignal): Promise<Place[]> {
-	if (!deps.placeCache.places) deps.placeCache.places = (await deps.engine.rest(a, "/i/api/1.1/trends/available.json", { signal })) as Place[];
+	if (!deps.placeCache.places) {
+		const list = await deps.engine.rest(a, "/i/api/1.1/trends/available.json", { signal });
+		if (!Array.isArray(list)) throw new XError("api_changed", "X trends/available.json did not return a list of places");
+		deps.placeCache.places = list as Place[];
+	}
 	return deps.placeCache.places;
 }
 
@@ -47,7 +51,8 @@ export async function runTrending(deps: ToolDeps, p: TrendingParams, signal?: Ab
 	const cfg = readConfig(deps);
 	const loc = (p.location ?? cfg.trendsLocation ?? "").trim();
 	const personalized = isPersonalized(p.location ?? cfg.trendsLocation);
-	const tab = p.tab ?? "trending";
+	// `tab` applies to personalized Explore only; place trends are always "trending".
+	const tab = personalized ? (p.tab ?? "trending") : "trending";
 	const limit = clamp(p.limit ?? 20, 1, 50);
 	const wantNews = (p.include_news ?? true) && tab === "trending";
 	const drillN = clamp(p.drilldown ?? 0, 0, 5);
@@ -64,7 +69,15 @@ export async function runTrending(deps: ToolDeps, p: TrendingParams, signal?: Ab
 				const near = suggestLocations(list, loc);
 				throw new XError("invalid_input", `Unknown trends location "${loc}"`, `Try: ${near.length ? near.join(", ") : "worldwide, United States, India, United Kingdom, Japan"}`);
 			}
-			const pt = parsePlaceTrends(await deps.engine.rest(a, `/i/api/1.1/trends/place.json?id=${place.woeid}`, { signal }));
+			const raw = await deps.engine.rest(a, `/i/api/1.1/trends/place.json?id=${place.woeid}`, { signal }).catch((e) => {
+				const x = toXError(e);
+				// X answers 404 for a WOEID it has no trends for.
+				if (x.code === "not_found" || (x.code === "api_changed" && /\b404\b/.test(x.message))) {
+					throw new XError("invalid_input", `Unknown trends location "${loc}" (X has no trends for WOEID ${place.woeid})`, "Try: worldwide, United States, India, United Kingdom, Japan");
+				}
+				throw x;
+			});
+			const pt = parsePlaceTrends(raw);
 			trends = pt.trends;
 			where = pt.location;
 		} else {
@@ -120,7 +133,7 @@ export async function runTrending(deps: ToolDeps, p: TrendingParams, signal?: Ab
 			engine: value.engine,
 			trends: value.trends,
 			news: value.news,
-			drilldown: value.drill.map((d) => ({ ...d, stats: { ...d.stats, top: d.stats.top, earliest_notable: d.stats.earliest_notable } })),
+			drilldown: value.drill,
 		},
 	};
 }

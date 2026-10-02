@@ -12,7 +12,7 @@ test("parseCompact is locale-tolerant", () => {
 	const cases: [string, number | undefined][] = [
 		["96K posts", 96_000], ["1.9M posts", 1_900_000], ["983 posts", 983], ["4K", 4000],
 		["1,234 Likes. Like", 1234], ["1.234 Gefällt mir", 1234], ["12 345 J’aime", 12345], ["12,5 K", 12500],
-		["132937 views", 132937], ["Like", undefined], ["", undefined],
+		["132937 views", 132937], ["12\u00a0345 J’aime", 12345], ["1\u202f234\u202f567 vues", 1234567], ["Like", undefined], ["", undefined],
 	];
 	for (const [s, n] of cases) assert.equal(parseCompact(s), n, s);
 });

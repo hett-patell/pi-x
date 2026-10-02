@@ -1,7 +1,7 @@
 import type { Account } from "../config.ts";
 import { domSearch } from "../dom.ts";
 import { toXError, XError } from "../errors.ts";
-import { fitToBudget, formatStats, formatTweet } from "../format.ts";
+import { fitToBudget, formatStats, formatTweet, OUTPUT_BUDGET } from "../format.ts";
 import { parseTimeline, type Tweet } from "../normalize.ts";
 import { buildQuery, collapseDuplicates, computeStats, scoreAll, type SearchFilters, sortTweets, validateFilters } from "../score.ts";
 import { clamp } from "../util.ts";
@@ -64,9 +64,10 @@ export async function runSearch(deps: ToolDeps, p: SearchParams, signal?: AbortS
 		`X search: "${rawQuery}" (${product}) — ${tweets.length} posts via account "${account.name}"` +
 		`${value.engine === "dom" ? " [page-scrape fallback]" : ""}${skipped.length ? ` (skipped ${skipped.join(", ")})` : ""}` +
 		`\n\n${formatStats(stats)}`;
-	const body = fitToBudget(head, tweets.map((t, i) => formatTweet(t, i + 1)));
+	const more = value.cursor ? `\n\nMore available: call x_search again with cursor "${value.cursor}".` : "";
+	const body = fitToBudget(head, tweets.map((t, i) => formatTweet(t, i + 1)), OUTPUT_BUDGET - Buffer.byteLength(more));
 	return {
-		text: body.text + (value.cursor ? `\n\nMore available: call x_search again with cursor "${value.cursor}".` : ""),
+		text: body.text + more,
 		details: {
 			query: rawQuery,
 			product,

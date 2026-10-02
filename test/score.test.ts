@@ -61,3 +61,11 @@ test("validateFilters", () => {
 	assert.match(validateFilters({ from: "not a handle" }) ?? "", /handle/);
 	assert.match(validateFilters({ lang: "english" }) ?? "", /lang/);
 });
+
+test("per_hour keeps 2 significant digits for sparse samples", () => {
+	const s = computeStats([tw("1", { created_at: "2026-10-01T00:00:00.000Z" }), tw("2", { created_at: "2026-10-03T02:00:00.000Z" })]);
+	assert.equal(s.hours, 50);
+	assert.equal(s.per_hour, 0.04);
+	const dense = computeStats([tw("1", { created_at: "2026-10-01T00:00:00.000Z" }), tw("2", { created_at: "2026-10-01T00:30:00.000Z" })]);
+	assert.equal(dense.per_hour, 4);
+});

@@ -104,3 +104,29 @@ test("drill-down text stays within OUTPUT_BUDGET even when per-trend content is 
 	assert.match(out.text, /more omitted to save context/);
 	assert.equal((out.details.drilldown as unknown[]).length, 5);
 });
+
+test("place list is cached only when X returns an array", async () => {
+	let bad = true;
+	const deps = fakeDeps({ rest: (path) => (path.includes("available") ? (bad ? { errors: [] } : fx("v11-trends-available")) : fx("v11-trends-place")) });
+	await assert.rejects(runTrending(deps, { location: "India" }), (e: XError) => e.code === "api_changed");
+	assert.equal(deps.placeCache.places, undefined);
+	bad = false;
+	assert.match((await runTrending(deps, { location: "India" })).text, /Trending — Worldwide/);
+	assert.ok(Array.isArray(deps.placeCache.places));
+});
+
+test("unknown numeric WOEID (X 404) is invalid_input, not api_changed", async () => {
+	const deps = fakeDeps({
+		rest: (path) => {
+			if (path.includes("available")) return fx("v11-trends-available");
+			throw new XError("api_changed", "X API endpoint returned 404 (operation changed?)");
+		},
+	});
+	await assert.rejects(runTrending(deps, { location: "999999999" }), (e: XError) => e.code === "invalid_input" && /Unknown trends location "999999999"/.test(e.message));
+});
+
+test("with a location, the title says Trending regardless of tab", async () => {
+	const deps = fakeDeps({ rest: (path) => (path.includes("available") ? fx("v11-trends-available") : fx("v11-trends-place")) });
+	const out = await runTrending(deps, { location: "India", tab: "news" });
+	assert.match(out.text, /^Trending — Worldwide/);
+});

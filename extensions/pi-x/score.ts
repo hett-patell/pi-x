@@ -103,6 +103,9 @@ function domainOf(u: string): string | null {
 	}
 }
 
+/** One decimal at ≥1/h; 2 significant digits below so sparse samples don't collapse to 0. */
+const perHour = (r: number) => (r >= 1 ? Math.round(r * 10) / 10 : Number(r.toPrecision(2)));
+
 export function computeStats(ts: Tweet[], duplicates = 0): Stats {
 	const times = ts.map(time).filter((x) => x > 0).sort((a, b) => a - b);
 	const from = times.length ? new Date(times[0]).toISOString() : null;
@@ -124,7 +127,7 @@ export function computeStats(ts: Tweet[], duplicates = 0): Stats {
 		from,
 		to,
 		hours,
-		per_hour: hours ? Math.round((ts.length / hours) * 10) / 10 : null,
+		per_hour: hours ? perHour(ts.length / hours) : null,
 		likes: agg(ts.map((t) => t.metrics.likes)),
 		retweets: agg(ts.map((t) => t.metrics.retweets)),
 		replies: agg(ts.map((t) => t.metrics.replies)),

@@ -7,11 +7,13 @@ export const OUTPUT_BUDGET = 40_000;
 export function compact(n: number | null | undefined): string {
 	if (n == null) return "–";
 	const abs = Math.abs(n);
-	const fmt = (v: number, s: string) => `${(v < 10 ? v.toFixed(1) : Math.round(v).toString()).replace(/\.0$/, "")}${s}`;
-	if (abs >= 1e9) return fmt(n / 1e9, "B");
-	if (abs >= 1e6) return fmt(n / 1e6, "M");
-	if (abs >= 1e3) return fmt(n / 1e3, "K");
-	return String(n);
+	const units: [number, string][] = [[1e3, "K"], [1e6, "M"], [1e9, "B"]];
+	const round = (v: number) => (v < 10 ? Math.round(v * 10) / 10 : Math.round(v));
+	let i = units.findLastIndex(([d]) => abs >= d);
+	if (i < 0) return String(n);
+	// 999_999 rounds to "1000K" → roll over to "1M"
+	if (round(abs / units[i][0]) >= 1000 && i < units.length - 1) i++;
+	return `${n < 0 ? "-" : ""}${round(abs / units[i][0])}${units[i][1]}`;
 }
 
 export function oneLine(s: string, max = 600): string {
@@ -37,10 +39,18 @@ export function formatTweet(t: Tweet, i?: number): string {
 	return lines.join("\n");
 }
 
+/** " (12/h)", or per day when sparse (" (~1/day)") — never "0/h". */
+function rate(s: Stats): string {
+	if (!s.per_hour || !s.hours) return "";
+	if (s.per_hour >= 1) return ` (${s.per_hour}/h)`;
+	const perDay = (s.count / s.hours) * 24;
+	return Math.round(perDay) >= 1 ? ` (~${Math.round(perDay)}/day)` : " (<1/day)";
+}
+
 export function formatStats(s: Stats): string {
 	if (!s.count) return "Stats: no posts";
 	const lines = [
-		`Stats: ${s.count} posts${s.hours != null ? ` over ${s.hours}h (${s.per_hour}/h)` : ""}${s.from ? ` · ${when(s.from)} → ${when(s.to)}` : ""}`,
+		`Stats: ${s.count} posts${s.hours != null ? ` over ${s.hours}h${rate(s)}` : ""}${s.from ? ` · ${when(s.from)} → ${when(s.to)}` : ""}`,
 		`  likes ${compact(s.likes.total)} (median ${compact(s.likes.median)}) · reposts ${compact(s.retweets.total)} · replies ${compact(s.replies.total)}${s.views ? ` · views ${compact(s.views.total)}` : ""}`,
 		`  verified authors ${Math.round(s.verified_share * 100)}%${s.duplicates ? ` · ${s.duplicates} copy-paste duplicates collapsed` : ""}`,
 	];

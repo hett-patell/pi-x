@@ -68,9 +68,9 @@ const num = (v: unknown): number => (typeof v === "number" ? v : typeof v === "s
 /** "96K posts" → 96000, "1,234 Likes" → 1234, "1.234 Gefällt mir" → 1234, "12,5 K" → 12500. */
 export function parseCompact(input: string | null | undefined): number | undefined {
 	if (!input) return undefined;
-	const m = /(\d+(?:[.,\s  ]\d+)*)\s*([KkMmBb])?(?![A-Za-z])/.exec(input);
+	const m = /(\d+(?:[.,\s\u00a0\u202f]\d+)*)\s*([KkMmBb])?(?![A-Za-z])/.exec(input);
 	if (!m) return undefined;
-	const digits = m[1].replace(/[\s  ]/g, "");
+	const digits = m[1].replace(/[\s\u00a0\u202f]/g, "");
 	const suffix = m[2]?.toUpperCase();
 	const mult = suffix === "K" ? 1e3 : suffix === "M" ? 1e6 : suffix === "B" ? 1e9 : 1;
 	const seps = digits.match(/[.,]/g) ?? [];

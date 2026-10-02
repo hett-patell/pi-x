@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { loadConfig } from "../extensions/pi-x/config.ts";
+import { OUTPUT_BUDGET } from "../extensions/pi-x/format.ts";
 import { XError } from "../extensions/pi-x/errors.ts";
 import { paginate, withAccount } from "../extensions/pi-x/tools/context.ts";
 import { runSearch } from "../extensions/pi-x/tools/search.ts";
@@ -70,4 +71,24 @@ test("x_search validates input", async () => {
 	const deps = fakeDeps({});
 	await assert.rejects(runSearch(deps, { query: " " }), (e: XError) => e.code === "invalid_input");
 	await assert.rejects(runSearch(deps, { query: "a", since: "yesterday" }), /YYYY-MM-DD/);
+});
+
+test("x_search: the next-cursor line counts toward OUTPUT_BUDGET", async () => {
+	const cursor = `DAAC${"q".repeat(3000)}`;
+	const entry = (i: number) => ({
+		tweet_results: {
+			result: {
+				__typename: "Tweet",
+				rest_id: String(1000 + i),
+				core: { user_results: { result: { __typename: "User", core: { screen_name: `u${i}`, name: "U" }, rest_id: String(i) } } },
+				legacy: { id_str: String(1000 + i), full_text: `post ${i} ${"w".repeat(700)}`, created_at: "Wed Oct 01 00:00:00 +0000 2026", favorite_count: 1, retweet_count: 0, reply_count: 0, quote_count: 0, bookmark_count: 0 },
+			},
+		},
+	});
+	const page = { data: { entries: [...Array.from({ length: 100 }, (_, i) => entry(i)), { cursorType: "Bottom", value: cursor }] } };
+	const deps = fakeDeps({ graphql: () => page });
+	const out = await runSearch(deps, { query: "x", limit: 100 });
+	assert.ok(Buffer.byteLength(out.text) <= OUTPUT_BUDGET, `text was ${Buffer.byteLength(out.text)} bytes`);
+	assert.ok(out.text.includes(`cursor "${cursor}"`));
+	assert.match(out.text, /more omitted/);
 });
