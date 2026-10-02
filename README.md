@@ -1,160 +1,248 @@
-# 🐦 pi-x
+# pi-x
 
-> Scrape & analyze **X (Twitter)** from inside [Pi](https://pi.dev) — self-diagnosing, multi-account browser scraping, free single-tweet fetch, and AI-synthesized insights. No $200/mo API required.
-
-*Inspired by [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s multi-backend routing + `doctor` self-diagnostic — brought natively to Pi.*
+**Give your Pi agent eyes on X — trending topics, news, and *why* things trend. No API keys.**
 
 [![pi-package](https://img.shields.io/badge/pi-package-blueviolet?style=flat-square)](https://pi.dev/packages)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20WSL-lightgrey?style=flat-square)](#requirements)
+[![tests](https://img.shields.io/badge/tests-85%20passing-brightgreen?style=flat-square)](./test)
 
-A [Pi](https://pi.dev) extension that gives your coding agent **native tools to read X**:
-fetch any tweet, scrape a topic by keyword, look up profiles, and turn the raw posts into
-real insights (sentiment, themes, top voices, engagement). It uses **free, no-auth** paths
-where they exist and **multi-account authenticated browser scraping** where X demands login —
-so you don't need a paid X API tier.
+pi-x is a [Pi](https://pi.dev) extension that lets your coding agent read X (Twitter) through
+**your own logged-in browser session** — trending topics and news, keyword search with real
+stats, threads, and profiles. No developer account, no $200/mo API tier, no cookies handed to
+a third-party script.
 
 ---
 
-## ✨ What it does
+## Demo
 
-| Tool | Capability | Cost |
-|---|---|---|
-| `x_doctor()` | **Self-diagnostic** — which backends/accounts work + what to fix (run first) | Free |
-| `x_tweet(id_or_url)` | Fetch a single tweet — text, author, full engagement, hashtags, media, quote chain | **Free**, no key, no login |
-| `x_scrape_topic(query, max?, account?, type?)` | Scrape a topic from x.com with **multi-account rotation**, returns structured posts | **Free** (browser; needs `/x login`) |
-| `x_search(query, max_results?, type?)` | Keyword search → clean JSON | Freemium ([SocialData.tools](https://socialdata.tools)) |
-| `x_user(username)` | Public profile (followers, bio, join date, verification) | Freemium |
+```
+> What's trending on X right now and why?
 
-After fetching, the agent **synthesizes insights** — not a dump of tweets: volume/hype,
-sentiment split, recurring themes, top voices by engagement, notable quotes (with URLs),
-and timeline spread.
+Trending — Worldwide
+ 1. #PPxSTAKE
+ 2. #BELTUR
+ 3. #PlsLoveรักได้ไหมEP4
+ 4. LENAMIU PLS LOVE EP4
+ 5. #TaşacakBuDeniz
 
-## 🧠 The X free-tier reality (why this exists)
+Why it's trending (top posts per trend):
 
-The official X API has **no free search tier** — free = posting only, and search starts at
-~$200/mo. This package routes around that:
+▸ #PPxSTAKE — 20 posts sampled
+Stats: 20 posts over 1.1h (18.2/h) · 2026-10-02 18:03 → 2026-10-02 19:07
+  likes 4.6K (median 2) · reposts 2.5K · replies 14K · views 87K
+  verified authors 70%
+  top voices: @pp_privatejet_2 (2, score 42K), @Junsznx (1, score 49), @aikawins (2, score 46)
+```
 
-- **Single-tweet fetch** uses Twitter's free, no-auth embedded-tweet syndication feed
-  (`cdn.syndication.twimg.com/tweet-result`) — token is required by the endpoint but
-  **not validated**.
-- **Topic search / profiles** are either routed through **SocialData.tools** (freemium,
-  free credits on signup, ~$0.20/1k results, no OAuth) or scraped directly from **x.com
-  with authenticated browser sessions** you log into once.
+That's one call to `x_trending` with `drilldown: 1` — a real trend, real engagement numbers,
+sampled live from X. No scraped HTML dump, no "I don't have access to real-time data."
 
-## 📦 Install
+## Why pi-x
 
-### In Pi (recommended)
+- **Free** — runs on the X session you're already logged into. No API keys, no per-call cost.
+- **Trends + news + drill-down** — not just a trends list: X News stories with volume & age, and
+  a `drilldown` that samples top posts per trend so the agent can explain *why* something is hot.
+- **Stats built for LLMs** — every search/trend result comes with a compact stats block
+  (velocity, medians, verified share, top voices/hashtags/sites) instead of a wall of raw JSON.
+- **Self-healing** — discovers X's internal API query IDs and features at runtime, and falls
+  back to page-scraping when X changes something, instead of breaking outright.
+- **Multi-account rotation** — add several accounts; pi-x rotates and backs off on rate limits.
+- **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never reads
+  or stores `auth_token`/`ct0`.
+- **Read-only** — no posting, liking, following, or DMing, ever.
+
+## How pi-x compares
+
+| | **pi-x** | Official X API | Scweet | twscrape | twikit | Agent-Reach / twitter-cli |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| No API key needed | ✅ | ❌ (search from ~$200/mo) | ✅ | ✅ | ✅ | ✅ |
+| Trends + news | ✅ | — | ❌ | ✅ (trends only) | ✅ (trends only) | ❌ |
+| Explains *why* it's trending | ✅ | — | ❌ | ❌ | ❌ | ❌ |
+| LLM-sized stats blocks | ✅ | — | ❌ | ❌ | ❌ | ❌ |
+| Cookies stay in the browser | ✅ | n/a | ❌ (reads `auth_token` out) | ❌ (stores cookies) | ❌ (stores cookies) | ❌ (reads cookies out) |
+| Agent-native (Pi tools, not a library) | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ CLI, not Pi-native |
+
+*Sources checked against each project's own code/docs as of 2026-10-01 — see `docs/superpowers/specs/2026-10-01-pi-x-v1-design.md` for the full survey. Scweet, twscrape, and twikit are Python libraries; Agent-Reach is a multi-platform CLI router that, for X, delegates to twitter-cli (no trends of its own). The closest architectural cousin is OpenCLI's `twitter` command, which also runs inside a logged-in browser page — but its trending is DOM-only, with no drill-down, stats, or Pi integration.*
+
+## Install
+
+Requires [Pi](https://pi.dev) ≥ 0.99, Node ≥ 22.18 (for development), and the
+[agent-browser](https://www.npmjs.com/package/agent-browser) CLI:
+
+```bash
+npm i -g agent-browser && agent-browser install
+```
+
+Then, in Pi:
+
 ```bash
 pi install git:github.com/hett-patell/pi-x
-# or try it once without adding it:
+# or try it once without installing:
 pi -e git:github.com/hett-patell/pi-x
 ```
 
-### Local / dev
-```bash
-git clone https://github.com/hett-patell/pi-x
-pi install ./pi-x
+## Quick start
+
+```
+/x login
 ```
 
-## ✅ Requirements
+Finish signing in (Google, Apple, or password + 2FA) in the browser window that opens — pi-x
+confirms the login itself and closes the window. Then just ask:
 
-- **Pi** (the coding agent) — [`@earendil-works/pi-coding-agent`](https://pi.dev)
-- For `x_scrape_topic` (browser scraping): Pi's **agent-browser** capability
-  (e.g. [`pi-agent-browser-native`](https://github.com/fitchmultz/pi-agent-browser-native)).
-- Optional: `sqlite3` on PATH — enables login-state detection in `/x accounts` (gracefully
-  skipped if absent).
-- Optional: a free [SocialData.tools](https://socialdata.tools/signup) key for `x_search` / `x_user`.
-
-## 🚀 Quick start
-
-```bash
-# 1) Log in an X account (one-time, per account). Opens a headed browser window.
-/x login default google        # complete Google / Apple / email + 2FA in the window
-/x login check default         # verify you're logged in
-
-# 2) (Optional) add more accounts for rotation
-/x account add burner
-/x login burner password
-
-# 3) (Optional) SocialData key for clean JSON search
-/x setkey <your_key>           # from https://socialdata.tools/signup (free credits)
+```
+What's trending on X right now, and why?
 ```
 
-Then just ask your agent in plain English:
+## Tools
 
-> *"Scrape X for trending AI news and summarize the reaction."*
-> *"What's the engagement on https://x.com/elonmusk/status/… ?"*
-> *"Give me a profile breakdown of @OpenAI."*
+| Tool | Key params | What it does |
+|---|---|---|
+| `x_trending` | `location?`, `tab?` (trending/news/sports/entertainment), `include_news?`, `limit?`, `drilldown?` (0–5) | Ranked trends + X News stories; `drilldown` samples top posts per trend to explain why it's trending. Marks trends `NEW` since the last check. |
+| `x_search` | `query`, `type?` (Latest/Top/Media), `limit?` (≤300), `from`/`to`/`mentions`, `since`/`until`, `lang`, `min_likes`/`min_retweets`/`min_replies`, `has`, `exclude`, `verified_only`, `near`/`within`, `cursor` | Filtered search with pagination and a stats block (velocity, medians, verified share, top voices/hashtags/sites, earliest notable post). |
+| `x_tweet` | `id_or_url`, `replies?` (0–100) | Reads one post with full engagement + quote chain; with `replies`, also the author's thread and top replies by engagement. |
+| `x_user` | `username`, `posts?` (0–100) | Profile (bio, followers, verified, joined); with `posts`, their recent posts with stats. |
+| `x_doctor` | — | Live per-account login check, API discovery report, exact fixes. Run this first if anything looks wrong. |
 
-## 🎛️ Commands
+## Commands
 
 | Command | What it does |
 |---|---|
-| `/x` | Status overview (tools, key, accounts, CLI presence) |
-| `/x doctor [--json]` | **Self-diagnostic** — which backends/accounts work + fixes |
-| `/x setkey <key>` · `/x clearkey` | Manage the SocialData API key |
-| `/x account add <name>` · `remove` · `list` · `active <name>` | Multi-account management |
-| `/x account chrome <name>` | Reuse your desktop Chrome's login (skip `/x login`) |
-| `/x account proxy <name> <url>` · `/x account noproxy <name>` | Per-account proxy (for IP-blocked X) |
-| `/x login [account] [google\|apple\|password\|manual]` | Log in an account (headed browser) |
-| `/x login check [account]` · `/x login clear` | Verify auth / clear login-method pref |
-| `/x state save\|restore\|list [account]` | Back up / restore auth (cookies + storage) |
-| `/x keepalive [account]` | Refresh the session (prevents idle timeout) |
+| `/x status` | Accounts, login state, rotation, trends location |
+| `/x login [account]` | Connect an X account (opens a browser window) |
+| `/x logout [account]` | Disconnect and delete the account's browser profile |
+| `/x add <name>` | Add another X account slot |
+| `/x remove <account>` | Remove an account (browser profile kept on disk) |
+| `/x use <account\|auto>` | Pin the account tools use (`auto` = rotate) |
+| `/x enable <account>` | Include an account in rotation |
+| `/x disable <account>` | Exclude an account from rotation |
+| `/x proxy <account> [url\|off]` | Set or clear an account's proxy |
+| `/x import-chrome <account>` | Reuse your desktop Chrome login for an account |
+| `/x location [place\|default]` | Default region for `x_trending` |
+| `/x doctor` | Full health check with fixes |
+| `/x backup [account]` | Save the account's login state to a file (0600) |
+| `/x restore [account]` | Restore a saved login state |
+| `/x close` | Close all pi-x browser windows |
+| `/x help` | Show all commands |
 
-## 🔐 Auth persistence (sessions don't expire)
+## Example prompts
 
-- X auth cookies (`auth_token`, `ct0`, `twid`) are **persistent** (~1 year) and stored in
-  each account's browser profile dir — they survive Pi/browser restarts.
-- `/x state save` exports cookies + localStorage + sessionStorage to a portable backup file.
-- `/x keepalive` visits `x.com/home` to refresh short-lived Cloudflare/guest tokens.
+- "What's trending on X right now, and why?"
+- "What's trending in India today?" *(location trends by place name or WOEID)*
+- "What's in the news on X?" *(`tab: "news"`)*
+- "What are people saying about the new iPhone — is sentiment positive or negative?"
+- "Search X for 'AI agents', top posts, min 20 likes"
+- "Find recent posts about the earthquake, excluding retweets, last 24 hours"
+- "Summarize this thread: https://x.com/user/status/12345" *(with reply reactions)*
+- "What do people think of this post's replies?"
+- "Look up @someaccount — are they a credible source?"
+- "Has pi-x's X session stopped working? Run a diagnostic."
 
-## 🧪 How scraping works
+## How it works
 
-`x_scrape_topic` drives Pi's browser: opens the x.com search URL in an account's
-authenticated profile, polls for tweets to render, extracts them via in-page JavaScript
-(`article[data-testid="tweet"]`), scrolls for more, dedupes, and returns structured posts.
-On a login wall or block it **falls back to the next logged-in account** — that's
-multi-account rotation.
+```
+ agent calls x_trending / x_search / x_tweet / x_user
+                      │
+                      ▼
+        ┌─────────────────────────┐
+        │  in-page X API engine   │  runs fetch() inside your logged-in
+        │  (xapi.ts + page.ts)    │  x.com tab — cookies never leave it
+        └────────────┬────────────┘
+                      │ needs a query ID / feature flag it hasn't seen?
+                      ▼
+        ┌─────────────────────────┐
+        │  runtime API discovery  │  finds the current GraphQL query ID
+        │                         │  from X's own loaded JS, caches it
+        └────────────┬────────────┘
+                      │ X changed the page layout, discovery fails?
+                      ▼
+        ┌─────────────────────────┐
+        │   DOM scrape fallback   │  reads the rendered page instead
+        │        (dom.ts)         │  of calling the API at all
+        └─────────────────────────┘
 
-x.com search operators are supported in `query`:
-`from:elonmusk`, `since:2026-01-01`, `until:`, `#hashtag`, `-filter:retweets`, `min_faves:50`, `OR`.
+ rate limit / lock on one account → back off, rotate to the next enabled account
+```
 
-## 🛠️ Troubleshooting
+Account rotation is least-recently-used by default (`/x use <account>` to pin one); a per-account
+lock keeps two tools from fighting over the same browser tab.
 
-| Symptom | Fix |
+## Privacy & safety
+
+- Cookies and login state live only in the browser profile under `~/.pi/agent/pi-x/profiles`
+  (directories `0700`) — pi-x never extracts or stores `auth_token`/`ct0` itself.
+- Config (`~/.pi/agent/pi-x/config.json`) is written `0600`.
+- Proxy credentials are masked in every message, log, and tool output.
+- All tools are read-only: no posting, liking, following, or DMing.
+- Use a secondary/burner X account if you're not comfortable connecting your main one.
+- You're responsible for respecting X's Terms of Service and rate limits — pi-x backs off on
+  rate limits automatically but doesn't bypass them.
+
+## Upgrading from 0.x
+
+pi-x 1.0 is a complete rewrite. On first run it **automatically migrates** your config from
+`~/.pi/x-insights.json` to `~/.pi/agent/pi-x/config.json` — no action needed. A few things to
+know:
+
+- **SocialData is gone.** `x_search` and `x_user` now use your logged-in browser session instead
+  of a paid key. Any `SOCIALDATA_API_KEY` or saved key is unused and can be deleted.
+- **`x_scrape_topic` merged into `x_search`** — use `x_search` with filters instead.
+- `/x setkey` / `/x clearkey` are gone; pi-x tells you so if you run them.
+- If you previously copied the old extension manually, remove
+  `~/.pi/agent/extensions/x-insights.ts` so it doesn't shadow the installed package.
+
+## Troubleshooting
+
+| Error | Fix |
 |---|---|
-| Scrape says "not logged in / blocked" | `/x login <account> <method>`, then retry |
-| Scrape returns few/no posts | retry (rotates accounts), use a tighter query, or `type: "Top"` |
-| `x_search` says "needs key" | run `/x setkey <key>`, or use `x_scrape_topic` (free) |
-| Only `default` works, not other accounts | `/x login <other>` — check status with `/x accounts` |
-| Live tool still buggy after edits | restart Pi (extensions load at startup) |
+| `browser_missing` | `npm i -g agent-browser && agent-browser install` |
+| `chrome_missing` | `agent-browser install` (Linux: `agent-browser install --with-deps`) |
+| `profile_busy` | The account's profile is open in another Chrome window — close it (or `/x close`) and retry |
+| `not_logged_in` | `/x login <account>` |
+| `account_locked` | Open x.com for this account in a normal browser, complete X's unlock challenge, then `/x login <account>` |
+| `rate_limited` | Wait a few minutes, lower `limit`, or add another account (`/x add <name>`, then `/x login <name>`) |
+| `timeout` | Retry; if it keeps happening, `/x doctor` (slow network or proxy?) |
+| `aborted` | Cancelled — no action needed |
+| `not_found` | Check the ID/handle — the post or account may be deleted, protected, or suspended |
+| `api_changed` | X changed its internal API. Run `x_doctor`; tools fall back to page scraping where possible |
+| `dom_changed` | X changed its page layout. Run `x_doctor`; patch `extensions/pi-x/dom.ts` and `/reload` |
+| `invalid_input` | Fix the parameters and retry |
+| `network` | Check your connection/proxy and retry |
 
-## 🗂️ Package contents
+## Development
+
+```bash
+npm install
+npm test        # unit tests against recorded fixtures
+npm run check   # tsc -p .
+npm run smoke   # live smoke test against real X — needs a logged-in account
+```
+
+Project layout:
 
 ```
-pi-x/
-├── extensions/
-│   └── x-insights.ts     # the extension (4 tools + /x command)
-├── skills/
-│   └── x-insights/SKILL.md   # tells Pi when/how to use the tools
-├── package.json          # pi-package; peers: pi-coding-agent, pi-ai
-├── README.md
-└── LICENSE
+extensions/pi-x/
+  index.ts        tool registration (x_trending, x_search, x_tweet, x_user, x_doctor)
+  commands.ts      /x command handling, SUBCOMMANDS, status footer
+  config.ts        config load/save, 0.x migration, account validation
+  accounts.ts      account lookup, proxy/secret masking
+  browser.ts       spawns agent-browser (only module that does)
+  page.ts          page-side code (String.raw, runs inside the logged-in tab)
+  xapi.ts          in-page X GraphQL engine + runtime query-ID discovery
+  dom.ts           DOM-scrape fallback when the API engine can't be used
+  errors.ts        XErrorCode, FIXES, XError
+  tools/           one module per tool (trending, search, tweet, user, doctor)
+skills/pi-x/       SKILL.md — how an agent should route requests and write insights
+test/              unit tests + recorded fixtures
+scripts/smoke.ts   live smoke script (npm run smoke)
 ```
 
-## 🤝 Contributing
+## Disclaimer
 
-PRs welcome. Before submitting: restart Pi to load your edits, and exercise each tool path
-(`x_tweet`, `x_scrape_topic`, `x_search`, `x_user`, and the `/x` subcommands).
+pi-x automates your own browser session to read publicly visible X content on your behalf. It
+does not post, like, follow, or message anyone. You are responsible for complying with X's Terms
+of Service and applicable law in your jurisdiction. Not affiliated with or endorsed by X Corp.
 
-## ⚠️ Disclaimer
+## License
 
-This reads **public** X data via free/no-auth endpoints and authenticated browser sessions
-you control. It does not post on your behalf, scrape private/DM content, or bypass X's
-paywalls for non-public data. Respect X's Terms of Service and rate limits. Not affiliated
- with X/Twitter or SocialData.tools.
-
-## 📄 License
-
-[MIT](./LICENSE) © Het Patel
+[MIT](./LICENSE)
