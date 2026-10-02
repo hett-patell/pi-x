@@ -1,5 +1,5 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { XError } from "./errors.ts";
 
 export interface Account {
@@ -149,12 +149,18 @@ export function profileFor(p: Paths, a: Account): string {
 	return a.profile ?? join(p.profilesDir, a.name);
 }
 
+/** True when `p` is a direct child of `base` (never `base` itself, a sibling, or a deeper path). */
+function isDirectChild(base: string, p: string): boolean {
+	const r = relative(base, p);
+	return !!r && !r.startsWith("..") && !isAbsolute(r) && !r.includes(sep);
+}
+
 /** True when pi-x owns the profile dir (safe to delete on logout). */
-export function isManagedProfile(p: Paths, a: Account): boolean {
+export function isManagedProfile(p: Paths, a: Account, legacyHome?: string): boolean {
 	const dir = profileFor(p, a);
 	if (!isAbsolute(dir)) return false;
 	const abs = resolve(dir);
-	return abs.startsWith(resolve(p.profilesDir)) || abs.includes(join(".pi", "x-insights", "profiles"));
+	return isDirectChild(resolve(p.profilesDir), abs) || (!!legacyHome && isDirectChild(resolve(legacyHome, ".pi", "x-insights", "profiles"), abs));
 }
 
 export function statePath(p: Paths, name: string): string {

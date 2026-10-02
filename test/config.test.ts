@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
-	defaultConfig, loadConfig, paths, profileFor, saveConfig, updateAccount, validateAccountName, validateConfig,
+	defaultConfig, isManagedProfile, loadConfig, paths, profileFor, saveConfig, updateAccount, validateAccountName, validateConfig,
 } from "../extensions/pi-x/config.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "pix-"));
@@ -108,4 +108,22 @@ test("validateAccountName", () => {
 	assert.match(validateAccountName("bad name") ?? "", /letters/);
 	assert.match(validateAccountName("help") ?? "", /reserved/);
 	assert.match(validateAccountName("Het", [{ name: "het", enabled: true }]) ?? "", /exists/);
+});
+
+test("isManagedProfile: only direct children of a managed profiles root", () => {
+	const home = tmp();
+	const p = paths(tmp());
+	const at = (profile: string) => ({ name: "x", enabled: true, profile });
+	const legacyRoot = join(home, ".pi", "x-insights", "profiles");
+	assert.equal(isManagedProfile(p, { name: "x", enabled: true }), true);
+	assert.equal(isManagedProfile(p, at(p.profilesDir)), false);
+	assert.equal(isManagedProfile(p, at(join(p.profilesDir, "..", "profiles-old", "x"))), false);
+	assert.equal(isManagedProfile(p, at(`${p.profilesDir}-old`)), false);
+	assert.equal(isManagedProfile(p, at(join(p.profilesDir, "a"))), true);
+	assert.equal(isManagedProfile(p, at(join(p.profilesDir, "a", "b"))), false);
+	assert.equal(isManagedProfile(p, at("Default")), false);
+	assert.equal(isManagedProfile(p, at(join(legacyRoot, "het")), home), true);
+	assert.equal(isManagedProfile(p, at(join(legacyRoot, "het"))), false);
+	assert.equal(isManagedProfile(p, at(legacyRoot), home), false);
+	assert.equal(isManagedProfile(p, at(join("/elsewhere", ".pi", "x-insights", "profiles", "het")), home), false);
 });

@@ -282,12 +282,16 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 			case "logout": {
 				const name = await pickAccount(deps, ui, arg0, "logout");
 				if (!name) return;
+				if (!ui.hasUI) {
+					ui.say("Logout needs interactive confirmation — run it in the Pi TUI", "warning");
+					return;
+				}
 				const a = findAccount(readConfig(deps), name)!;
-				const managed = isManagedProfile(deps.paths, a);
+				const managed = isManagedProfile(deps.paths, a, deps.legacyHome);
 				const msg = managed ? `This deletes ${profileFor(deps.paths, a)} (cookies, login).` : "The profile isn't managed by pi-x, so only the connection is cleared.";
 				if (!(await ui.confirm(`Log out "${name}"?`, msg))) return;
 				await deps.sessions.close(a);
-				if (managed) rmSync(profileFor(deps.paths, a), { recursive: true, force: true });
+				if (managed) rmSync(profileFor(deps.paths, a), { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 				updateAccount(deps.paths, name, { handle: undefined });
 				ui.say(`✓ Logged out "${name}"`);
 				break;

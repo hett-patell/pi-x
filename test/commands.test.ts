@@ -5,11 +5,12 @@ import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } fr
 import { loadConfig, profileFor } from "../extensions/pi-x/config.ts";
 import { fakeDeps } from "./helpers.ts";
 
-function ui(answers: { select?: string; confirm?: boolean } = {}) {
+function ui(answers: { select?: string; confirm?: boolean; hasUI?: boolean } = {}) {
 	const said: string[] = [];
-	const u: CommandUI & { said: string[]; status?: string } = {
-		said, hasUI: true,
-		say: (t) => { said.push(t); },
+	const levels: (string | undefined)[] = [];
+	const u: CommandUI & { said: string[]; levels: (string | undefined)[]; status?: string } = {
+		said, levels, hasUI: answers.hasUI ?? true,
+		say: (t, level) => { said.push(t); levels.push(level); },
 		select: async () => answers.select,
 		confirm: async () => answers.confirm ?? true,
 		setStatus: (t) => { u.status = t; },
@@ -80,6 +81,18 @@ test("logout deletes only managed profiles after confirmation", async () => {
 	await runCommand("logout default", deps, ui({ confirm: true }));
 	assert.ok(!existsSync(dir));
 	assert.equal(loadConfig(deps.paths).config.accounts[0].handle, undefined);
+});
+
+test("logout without a UI explains instead of returning silently", async () => {
+	const deps = fakeDeps({}, { version: 1, accounts: [{ name: "default", enabled: true, handle: "me" }] });
+	const dir = profileFor(deps.paths, { name: "default", enabled: true });
+	mkdirSync(dir, { recursive: true });
+	const u = ui({ hasUI: false });
+	await runCommand("logout default", deps, u);
+	assert.ok(existsSync(dir));
+	assert.match(u.said.at(-1)!, /Logout needs interactive confirmation — run it in the Pi TUI/);
+	assert.equal(u.levels.at(-1), "warning");
+	assert.equal(loadConfig(deps.paths).config.accounts[0].handle, "me");
 });
 
 test("login opens headed browser and confirms the handle in the background", async () => {
