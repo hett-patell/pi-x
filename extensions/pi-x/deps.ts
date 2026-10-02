@@ -5,7 +5,7 @@ import type { ToolDeps } from "./tools/context.ts";
 import { abortableSleep } from "./util.ts";
 import { Engine } from "./xapi.ts";
 
-export function createDeps(agentDir: string, legacyHome: string = homedir()): ToolDeps & { sessionsImpl: Sessions } {
+export function createDeps(agentDir: string, legacyHome: string = homedir()): ToolDeps {
 	const p = paths(agentDir);
 	const binary = resolveBinary();
 	const runner = binary ? createRunner(binary) : missingRunner;
@@ -15,7 +15,6 @@ export function createDeps(agentDir: string, legacyHome: string = homedir()): To
 		legacyHome,
 		engine: new Engine({ sessions }),
 		sessions,
-		sessionsImpl: sessions,
 		locks: new AccountLocks(),
 		runner,
 		binary,

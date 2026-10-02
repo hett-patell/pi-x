@@ -10,6 +10,7 @@ import { scrubSecrets } from "./accounts.ts";
 import { type CommandUI, completeArgs, footerText, runCommand } from "./commands.ts";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
+import { FIXES } from "./errors.ts";
 import { errorOutput, type Progress, readConfig, type ToolOutput } from "./tools/context.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runSearch } from "./tools/search.ts";
@@ -63,6 +64,20 @@ const UserParams = Type.Object({
 	account: Account,
 });
 
+/**
+ * Last-resort tool result when formatting the real result/error itself fails (e.g. config
+ * unreadable). Built with no I/O and no dependency on `deps`, so it cannot throw — tools must
+ * never reject to Pi.
+ */
+export function internalErrorFallback(e: unknown): { content: { type: "text"; text: string }[]; details: Record<string, unknown>; isError: true } {
+	const message = e instanceof Error ? e.message : String(e);
+	return {
+		content: [{ type: "text", text: `✗ pi-x internal error: ${message}` }],
+		details: { error: { code: "network", message, fix: FIXES.network } },
+		isError: true,
+	};
+}
+
 export default function piX(pi: ExtensionAPI) {
 	const deps = createDeps(getAgentDir());
 
@@ -79,11 +94,23 @@ export default function piX(pi: ExtensionAPI) {
 
 	function tool<P>(run: (params: P, signal: AbortSignal | undefined, progress: Progress) => Promise<ToolOutput>) {
 		return async (_id: string, params: P, signal: AbortSignal | undefined, onUpdate?: (r: { content: { type: "text"; text: string }[]; details: Record<string, unknown> }) => void) => {
-			const progress: Progress = (msg) => onUpdate?.({ content: [{ type: "text", text: msg }], details: { progress: msg } });
+			const progress: Progress = (msg) => {
+				if (!onUpdate) return;
+				try {
+					const text = scrubSecrets(msg, readConfig(deps));
+					onUpdate({ content: [{ type: "text", text }], details: { progress: text } });
+				} catch {
+					// config unreadable — drop this progress update rather than risk sending an unscrubbed message
+				}
+			};
 			try {
 				return finish(await run(params, signal, progress));
 			} catch (e) {
-				return finish(errorOutput(e));
+				try {
+					return finish(errorOutput(e));
+				} catch (e2) {
+					return internalErrorFallback(e2);
+				}
 			}
 		};
 	}
