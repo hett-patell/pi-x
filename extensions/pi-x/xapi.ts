@@ -7,6 +7,8 @@ export interface CallOptions {
 	signal?: AbortSignal;
 	method?: "GET" | "POST";
 	timeoutMs?: number;
+	/** Run exactly once: no re-eval after a failed page script, no rate-limit retry. Required for writes. */
+	once?: boolean;
 }
 
 interface SessionsLike {
@@ -83,6 +85,8 @@ export class Engine {
 		} catch (e) {
 			const x = e as XError;
 			if (x.code === "aborted" || x.code === "browser_missing" || x.code === "chrome_missing" || x.code === "profile_busy") throw x;
+			// A write may already have reached X before the script failed — never re-run it.
+			if (opts.once) throw x;
 			this.sessions.invalidate(a);
 			return evalOnce();
 		}
@@ -94,7 +98,7 @@ export class Engine {
 			if (res.rateLimit) this.rate.set(`${a.name}:${req.kind === "graphql" ? req.op : req.kind}`, res.rateLimit);
 			const err = classifyResponse(res);
 			if (!err) return res.data;
-			if (err.code === "rate_limited" && attempt < this.maxRetries) {
+			if (err.code === "rate_limited" && !opts.once && attempt < this.maxRetries) {
 				await this.sleep((5 * 2 ** attempt + this.random() * 2) * 1000, opts.signal);
 				continue;
 			}
@@ -112,7 +116,7 @@ export class Engine {
 
 	/** Send a direct message via X's internal REST endpoint (create/reuse conversation, then send). */
 	async dm(a: Account, recipientId: string, text: string, opts: CallOptions = {}): Promise<unknown> {
-		return this.request(a, { kind: "dm", recipientId, text }, opts);
+		return this.request(a, { kind: "dm", recipientId, text }, { ...opts, once: true });
 	}
 
 	/** Raw DM inbox state (conversations, entries, users) from X's REST endpoint. */

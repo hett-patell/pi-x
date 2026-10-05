@@ -238,7 +238,13 @@ export function parseTimeline(json: unknown): TimelinePage {
 	return { tweets, cursor };
 }
 
-const older = (a: string, b: string) => (a.length !== b.length ? a.length < b.length : a < b);
+
+/** Compare X numeric id strings (snowflakes) by value; plain string comparison breaks across lengths. */
+export function compareIds(a: string, b: string): number {
+	if (a.length !== b.length) return a.length - b.length;
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+const older = (a: string, b: string) => compareIds(a, b) < 0;
 
 export function splitConversation(focal: Tweet, tweets: Tweet[]): { ancestors: Tweet[]; thread: Tweet[]; replies: Tweet[] } {
 	const ancestors: Tweet[] = [];
@@ -303,7 +309,7 @@ export function parseDmInbox(json: unknown, selfId: string): DmConversation[] {
 		const md = msg.message_data ?? {};
 		const eventId = String(msg.id ?? md.id ?? "");
 		const cur = lastByConv.get(cid);
-		if (cur && cur.eventId >= eventId) continue;
+		if (cur && compareIds(cur.eventId, eventId) >= 0) continue;
 		lastByConv.set(cid, {
 			eventId,
 			text: typeof md.text === "string" ? md.text : "",
@@ -322,7 +328,7 @@ export function parseDmInbox(json: unknown, selfId: string): DmConversation[] {
 		const u = users[otherId] ?? {};
 		const last = lastByConv.get(cid);
 		const lastRead = conv?.last_read_event_id != null ? String(conv.last_read_event_id) : null;
-		const unread = Boolean(last && last.senderId !== self && lastRead != null && last.eventId > lastRead);
+		const unread = Boolean(last && last.senderId !== self && lastRead != null && compareIds(last.eventId, lastRead) > 0);
 		out.push({
 			id: cid,
 			handle: String(u.screen_name ?? other.screen_name ?? otherId),

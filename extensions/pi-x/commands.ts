@@ -33,7 +33,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "proxy", usage: "/x proxy <account> [url|off]", help: "Set or clear an account's proxy", takesAccount: true },
 	{ name: "import-chrome", usage: "/x import-chrome <account>", help: "Reuse your desktop Chrome login for an account", takesAccount: true },
 	{ name: "location", usage: "/x location [place|default]", help: "Default region for x_trending" },
-	{ name: "write", usage: "/x write [on|off]", help: "Allow sending DMs (opt-in; default off)" },
+	{ name: "write", usage: "/x write on|off [--no-confirm]", help: "Allow DM access: read inbox + send (opt-in; default off)" },
 	{ name: "doctor", usage: "/x doctor", help: "Full health check with fixes" },
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
@@ -117,7 +117,7 @@ export function statusText(deps: ToolDeps, running: string[]): string {
 		"",
 		`Rotation:        ${cfg.active ? `pinned to "${cfg.active}" (/x use auto to rotate)` : "auto — least-recently-used first"}`,
 		`Trends location: ${cfg.trendsLocation ?? "account default (personalized Explore)"}`,
-		`Write (DM):      ${cfg.write ? "enabled (/x write off)" : "off (read-only — /x write on)"}`,
+		`DM access:       ${cfg.write ? `on${cfg.writeNoConfirm ? " — sends WITHOUT confirmation" : " — each send asks to confirm"} (/x write off)` : "off (read-only — /x write on)"}`,
 		`agent-browser:   ${deps.binary ? deps.binary.file : "NOT FOUND → npm i -g agent-browser && agent-browser install"}`,
 		"",
 		connected ? 'Try asking: "What\'s trending on X right now, and why?"  ·  /x doctor re-checks everything live' : "Next: /x login  — connect an X account (Google / Apple / password all work)",
@@ -304,11 +304,21 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 			case "write": {
 				const on = /^(on|1|true|yes)$/i.test(arg0 ?? "");
 				const off = /^(off|0|false|no)$/i.test(arg0 ?? "");
-				if (!on && !off) throw new XError("invalid_input", "Usage: /x write on|off");
+				if (!on && !off) throw new XError("invalid_input", "Usage: /x write on|off [--no-confirm]");
+				const noConfirm = on && cmd.args.includes("--no-confirm");
 				updateConfig(deps.paths, (c) => {
 					c.write = on;
+					if (noConfirm) c.writeNoConfirm = true;
+					else delete c.writeNoConfirm;
 				});
-				ui.say(on ? "✓ Write mode enabled — x_dm can now send direct messages (/x write off to disable)" : "✓ Write mode disabled — pi-x is read-only");
+				ui.say(
+					!on
+						? "✓ DM access disabled — pi-x is read-only"
+						: noConfirm
+							? "✓ DM access enabled — x_dm_inbox can read your DMs and x_dm sends WITHOUT asking (also works headless). /x write on to require confirmation again"
+							: "✓ DM access enabled — x_dm_inbox can read your DMs; x_dm asks you to confirm every message (/x write off to disable)",
+					noConfirm ? "warning" : "info",
+				);
 				break;
 			}
 			case "login": {

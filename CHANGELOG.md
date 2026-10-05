@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 — 2026-10-05
+
+### Added
+- `x_dm_inbox`: recent 1:1 DM conversations with the last message and unread status.
+- `x_dm`: send a direct message (create or reuse the 1:1 conversation).
+- `/x write on|off [--no-confirm]`: opt-in DM access, off by default. `/x status` shows it.
+- API discovery scans every loaded script bundle, so operations outside `main.js` are found too.
+
+### Safety
+- Each `x_dm` send asks you to confirm the recipient and text in the Pi UI. Without a UI it refuses unless you chose `/x write on --no-confirm`.
+- A DM goes out from exactly one account (named, else active, else first enabled) and is never rotated to another account.
+- A DM is sent exactly once: no re-run after a failed page script and no rate-limit retry, so a timeout can't cause a duplicate.
+- Both DM tools are blocked until `/x write on`; DM text is treated as untrusted input in the skill.
+
+### Fixed
+- DM inbox picked the wrong "latest" message and unread state when message ids had different lengths (ids were compared as text).
+
 ## 1.0.2 — 2026-10-05
 
 ### Fixed

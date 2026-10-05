@@ -1,3 +1,4 @@
+import { orderAccounts } from "../accounts.ts";
 import { XError } from "../errors.ts";
 import { parseDmInbox, parseUser } from "../normalize.ts";
 import { readConfig, type Progress, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
@@ -29,34 +30,67 @@ function conversationIdFrom(data: unknown): string | null {
 	return walk(data);
 }
 
+/** Asks the human to approve one send. Absent when there is no interactive UI. */
+export type ConfirmSend = (title: string, message: string) => Promise<boolean>;
+
+function requireDmAccess(deps: ToolDeps): void {
+	if (!readConfig(deps).write) {
+		throw new XError("write_disabled", "DM access is off (pi-x is read-only by default). Run /x write on to enable it.");
+	}
+}
+
+/**
+ * Send one DM. Writes are deliberately different from reads:
+ * - exactly one account (named, else active, else first enabled) — never rotated to another account;
+ * - the send runs once — no re-run after a failed page script, no rate-limit retry (no duplicates);
+ * - every send is confirmed by the user, unless `/x write on --no-confirm` was set.
+ */
 export async function runDm(
 	deps: ToolDeps,
 	p: { to: string; text: string; account?: string },
 	signal?: AbortSignal,
 	progress?: Progress,
+	confirm?: ConfirmSend,
 ): Promise<ToolOutput> {
 	const handle = parseUsername(p.to);
 	const text = (p.text ?? "").trim();
 	if (!text) throw new XError("invalid_input", "Message text is empty");
 	if (text.length > MAX_TEXT) throw new XError("invalid_input", `Message is ${text.length} characters; max ${MAX_TEXT}`);
-	if (!readConfig(deps).write) {
-		throw new XError("write_disabled", "Direct messages are disabled (pi-x is read-only by default). Run /x write on to enable.");
+	requireDmAccess(deps);
+	const cfg = readConfig(deps);
+	if (!confirm && !cfg.writeNoConfirm) {
+		throw new XError(
+			"write_disabled",
+			"Sending a DM needs your confirmation, and there is no interactive UI here",
+			"Send it from the Pi TUI, or allow unconfirmed sends with /x write on --no-confirm",
+		);
 	}
 
-	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+	const a = orderAccounts(cfg, p.account)[0];
+	const from = `@${a.handle ?? a.name}`;
+	const result = await deps.locks.run(a.name, async () => {
 		progress?.("resolving recipient…");
 		const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, { signal }));
 		if (!user) throw new XError("not_found", `@${handle} not found (suspended, renamed, or never existed)`);
 		if (!/^\d+$/.test(user.id)) throw new XError("api_changed", `@${handle} resolved but no numeric id (got "${user.id}") — X may have changed the user shape`);
 
-		progress?.(`sending DM to @${handle}…`);
+		if (confirm && !cfg.writeNoConfirm) {
+			const preview = text.length > 500 ? `${text.slice(0, 500)}…` : text;
+			const ok = await confirm(`Send DM from ${from} to @${user.handle}?`, preview);
+			if (!ok) return null;
+		}
+
+		progress?.(`sending DM to @${user.handle}…`);
 		const data = await deps.engine.dm(a, user.id, text, { signal });
-		return { handle, conversationId: conversationIdFrom(data) };
+		return { handle: user.handle, conversationId: conversationIdFrom(data) };
 	});
 
+	if (!result) {
+		return { text: `✗ Not sent — you declined the DM to @${handle}.`, details: { account: a.name, to: handle, sent: false } };
+	}
 	return {
-		text: `✓ DM sent to @${handle} from @${account.handle ?? account.name}.`,
-		details: { account: account.name, to: handle, conversationId: value.conversationId, text },
+		text: `✓ DM sent to @${result.handle} from ${from}.`,
+		details: { account: a.name, to: result.handle, sent: true, conversationId: result.conversationId, text },
 	};
 }
 
@@ -78,6 +112,7 @@ export async function runDmInbox(
 	signal?: AbortSignal,
 	progress?: Progress,
 ): Promise<ToolOutput> {
+	requireDmAccess(deps);
 	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
 		progress?.("loading inbox…");
 		const viewer = await deps.engine.viewer(a, { signal });

@@ -28,7 +28,7 @@ export const FIXES: Record<XErrorCode, string> = {
 	dom_changed: "X changed its page layout. Run x_doctor, update pi-x (pi update), or report it at https://github.com/hett-patell/pi-x/issues",
 	invalid_input: "Fix the parameters and retry",
 	network: "Check your connection/proxy and retry",
-	write_disabled: "Run /x write on to enable DM sending (opt-in; off by default)",
+	write_disabled: "Run /x write on to allow DM access (opt-in; off by default). Sending in headless mode also needs --no-confirm",
 };
 
 const ROTATABLE: ReadonlySet<XErrorCode> = new Set<XErrorCode>([

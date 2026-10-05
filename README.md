@@ -4,7 +4,7 @@
 
 [![pi-package](https://img.shields.io/badge/pi-package-blueviolet?style=flat-square)](https://pi.dev/packages)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen?style=flat-square)](./test)
+[![tests](https://img.shields.io/badge/tests-109%20passing-brightgreen?style=flat-square)](./test)
 [![npm](https://img.shields.io/npm/v/@hett/pi-x?style=flat-square)](https://www.npmjs.com/package/@hett/pi-x)
 
 pi-x is a [Pi](https://pi.dev) extension that lets your coding agent read X (Twitter) through
@@ -50,7 +50,7 @@ sampled live from X. No scraped HTML dump, no "I don't have access to real-time 
 - **Multi-account rotation** — add several accounts; pi-x rotates and backs off on rate limits.
 - **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never
   extracts your cookies or sends them anywhere.
-- **Read-only by default** — no posting, liking, or following. Direct messages are opt-in via `/x write on`.
+- **Read-only by default** — no posting, liking, or following. DM access (read your inbox, send a DM you confirm) is opt-in via `/x write on`.
 
 ## How pi-x compares
 
@@ -106,6 +106,8 @@ What's trending on X right now, and why?
 | `x_tweet` | `id_or_url`, `replies?` (0–100) | Reads one post with full engagement + quote chain; with `replies`, also the author's thread and top replies by engagement. |
 | `x_user` | `username`, `posts?` (0–100) | Profile (bio, followers, verified, joined); with `posts`, their recent posts with stats. |
 | `x_doctor` | — | Live per-account login check, API discovery report, exact fixes. Run this first if anything looks wrong. |
+| `x_dm_inbox` | `account?` | Your recent 1:1 DM conversations: who, last message, unread. Needs `/x write on`. |
+| `x_dm` | `to`, `text`, `account?` | Send one DM. Needs `/x write on`; you confirm every message in the Pi UI. Sent once, from one account — never rotated or retried. |
 
 ## Commands
 
@@ -122,6 +124,7 @@ What's trending on X right now, and why?
 | `/x proxy <account> [url\|off]` | Set or clear an account's proxy |
 | `/x import-chrome <account>` | Reuse your desktop Chrome login for an account |
 | `/x location [place\|default]` | Default region for `x_trending` |
+| `/x write on\|off [--no-confirm]` | Allow DM access: read inbox + send (off by default). `--no-confirm` skips the per-message prompt, e.g. for headless use |
 | `/x doctor` | Full health check with fixes |
 | `/x backup [account]` | Save the account's login state to a file (0600) |
 | `/x restore [account]` | Restore a saved login state |
@@ -183,7 +186,7 @@ locks are per process, and exiting one Pi closes the pi-x browser sessions the o
   private; anyone holding it can use your X session.
 - Config (`~/.pi/agent/pi-x/config.json`) is written `0600`.
 - Proxy credentials are masked in every message, log, and tool output.
-- All tools are read-only by default: no posting, liking, or following. `x_dm` sends direct messages only after you enable write mode with `/x write on`.
+- Read-only by default: no posting, liking, or following, and DMs are untouched. `/x write on` lets `x_dm_inbox` read your DMs and `x_dm` send them. Each send shows the recipient and text for you to approve (unless you chose `--no-confirm`), goes out from exactly one account, and is never retried — so no duplicates or messages from the wrong account.
 - Use a secondary/burner X account if you're not comfortable connecting your main one.
 - You're responsible for respecting X's Terms of Service and rate limits — pi-x backs off on
   rate limits automatically but doesn't bypass them.
@@ -232,7 +235,7 @@ Project layout:
 
 ```
 extensions/pi-x/
-  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_doctor), /x wiring
+  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_dm, x_dm_inbox, x_doctor), /x wiring
   commands.ts      /x command handling, SUBCOMMANDS, status footer, login watcher
   deps.ts          builds the shared ToolDeps (lazy agent-browser runner, sessions, engine, locks)
   config.ts        config load/save, 0.x migration, account validation, managed-profile check
