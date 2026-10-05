@@ -33,6 +33,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "proxy", usage: "/x proxy <account> [url|off]", help: "Set or clear an account's proxy", takesAccount: true },
 	{ name: "import-chrome", usage: "/x import-chrome <account>", help: "Reuse your desktop Chrome login for an account", takesAccount: true },
 	{ name: "location", usage: "/x location [place|default]", help: "Default region for x_trending" },
+	{ name: "write", usage: "/x write [on|off]", help: "Allow sending DMs (opt-in; default off)" },
 	{ name: "doctor", usage: "/x doctor", help: "Full health check with fixes" },
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
@@ -116,6 +117,7 @@ export function statusText(deps: ToolDeps, running: string[]): string {
 		"",
 		`Rotation:        ${cfg.active ? `pinned to "${cfg.active}" (/x use auto to rotate)` : "auto — least-recently-used first"}`,
 		`Trends location: ${cfg.trendsLocation ?? "account default (personalized Explore)"}`,
+		`Write (DM):      ${cfg.write ? "enabled (/x write off)" : "off (read-only — /x write on)"}`,
 		`agent-browser:   ${deps.binary ? deps.binary.file : "NOT FOUND → npm i -g agent-browser && agent-browser install"}`,
 		"",
 		connected ? 'Try asking: "What\'s trending on X right now, and why?"  ·  /x doctor re-checks everything live' : "Next: /x login  — connect an X account (Google / Apple / password all work)",
@@ -297,6 +299,16 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 					else c.trendsLocation = place;
 				});
 				ui.say(/^default$/i.test(place) ? "✓ Trends use each account's personalized Explore" : `✓ Trends default to "${place}" (checked on first use)`);
+				break;
+			}
+			case "write": {
+				const on = /^(on|1|true|yes)$/i.test(arg0 ?? "");
+				const off = /^(off|0|false|no)$/i.test(arg0 ?? "");
+				if (!on && !off) throw new XError("invalid_input", "Usage: /x write on|off");
+				updateConfig(deps.paths, (c) => {
+					c.write = on;
+				});
+				ui.say(on ? "✓ Write mode enabled — x_dm can now send direct messages (/x write off to disable)" : "✓ Write mode disabled — pi-x is read-only");
 				break;
 			}
 			case "login": {

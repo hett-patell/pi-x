@@ -27,8 +27,16 @@ function install(replies: Reply[], cookie = "ct0=CSRF; twid=u%3D1", mainJs = MAI
 	g.location = { href: "https://x.com/home", origin: "https://x.com", pathname: "/home" };
 	g.fetch = async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
 		calls.push({ url, init });
-		const r: Reply = url.includes("main.") ? { status: 200, body: mainJs } : (replies.shift() ?? { status: 500, body: "no reply" });
-		return { ok: r.status < 400, status: r.status, text: async () => r.body, headers: { get: (k: string) => r.headers?.[k] ?? null } };
+		const resp = (status: number, body: string, headers?: Record<string, string>) => ({
+			ok: status < 400,
+			status,
+			text: async () => body,
+			headers: { get: (k: string) => headers?.[k] ?? null },
+		});
+		if (url.includes("main.")) return resp(200, mainJs);
+		if (/\.js(?:[?#]|$)/.test(url)) return resp(200, ""); // other bundles carry no queryId entries
+		const r: Reply = replies.shift() ?? { status: 500, body: "no reply" };
+		return resp(r.status, r.body, r.headers);
 	};
 }
 
@@ -90,6 +98,38 @@ test("missing op and missing ct0 produce coded errors", async () => {
 	const r = await run({ kind: "graphql", op: "Viewer", vars: {} });
 	assert.equal(r.ok, false);
 	assert.match(r.error, /^not_logged_in:/);
+});
+
+test("dm sends to a new conversation via recipient_ids", async () => {
+	install([
+		{ status: 200, body: '{"inbox_initial_state":{"conversations":{}}}' },
+		{ status: 200, body: '{"conversation_id":"11-22"}' },
+	]);
+	const r = await run({ kind: "dm", recipientId: "999", text: "Hey" });
+	assert.equal(r.ok, true);
+	assert.equal(r.data.conversation_id, "11-22");
+	const c = calls.find((x) => x.url.includes("/dm/new2.json"))!;
+	assert.equal(c.init?.method, "POST");
+	assert.deepEqual(JSON.parse(c.init!.body!), {
+		text: "Hey",
+		cards_platform: "Web-12",
+		include_cards: 1,
+		include_quote_count: true,
+		dm_users: false,
+		recipient_ids: "999",
+	});
+});
+
+test("dm reuses an existing conversation id", async () => {
+	install([
+		{ status: 200, body: '{"inbox_initial_state":{"conversations":{"11-22":{"participants":[{"user_id":"999"}]}}}}' },
+		{ status: 200, body: '{"ok":true}' },
+	]);
+	await run({ kind: "dm", recipientId: "999", text: "Hi" });
+	const c = calls.find((x) => x.url.includes("/dm/new2.json"))!;
+	assert.equal(JSON.parse(c.init!.body!).conversation_id, "11-22");
+	assert.equal(JSON.parse(c.init!.body!).recipient_ids, false);
+	assert.equal(JSON.parse(c.init!.body!).text, "Hi");
 });
 
 test("dom classify reports login state from cookies + path", async () => {

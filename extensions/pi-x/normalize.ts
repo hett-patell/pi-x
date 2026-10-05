@@ -264,6 +264,78 @@ export function parseUser(json: unknown): XUser | null {
 	return userFromResult((json as J)?.data?.user?.result);
 }
 
+export interface DmConversation {
+	id: string;
+	handle: string;
+	name: string;
+	last_text: string | null;
+	/** "you" or the other participant's handle. */
+	last_sender: string | null;
+	/** ISO timestamp of the last message. */
+	last_at: string | null;
+	unread: boolean;
+}
+
+function dmTime(s: unknown): string | null {
+	if (typeof s !== "string" || !s) return null;
+	if (/^\d+$/.test(s)) {
+		const d = new Date(Number(s));
+		return Number.isNaN(d.getTime()) ? s : d.toISOString();
+	}
+	const d = new Date(s);
+	return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** Flatten X's `inbox_initial_state.json` into recent 1:1 conversations (skips group DMs). */
+export function parseDmInbox(json: unknown, selfId: string): DmConversation[] {
+	const inbox = (json as J)?.inbox_initial_state;
+	if (!inbox) return [];
+	const conversations = (inbox.conversations ?? {}) as Record<string, J>;
+	const entries = (inbox.entries ?? []) as J[];
+	const users = (inbox.users ?? {}) as Record<string, J>;
+	const self = String(selfId ?? "");
+
+	const lastByConv = new Map<string, { eventId: string; text: string; senderId: string; time: string | null }>();
+	for (const e of entries) {
+		const msg = e?.message ?? {};
+		const cid = String(msg.conversation_id ?? "");
+		if (!cid) continue;
+		const md = msg.message_data ?? {};
+		const eventId = String(msg.id ?? md.id ?? "");
+		const cur = lastByConv.get(cid);
+		if (cur && cur.eventId >= eventId) continue;
+		lastByConv.set(cid, {
+			eventId,
+			text: typeof md.text === "string" ? md.text : "",
+			senderId: String(md.sender_id ?? ""),
+			time: dmTime(md.time),
+		});
+	}
+
+	const out: DmConversation[] = [];
+	for (const [cid, conv] of Object.entries(conversations)) {
+		if (String(conv?.type ?? "") === "GROUP_DM") continue;
+		const participants = (conv?.participants ?? []) as J[];
+		const other = participants.find((p) => String(p?.user_id ?? "") !== self);
+		if (!other) continue;
+		const otherId = String(other.user_id ?? "");
+		const u = users[otherId] ?? {};
+		const last = lastByConv.get(cid);
+		const lastRead = conv?.last_read_event_id != null ? String(conv.last_read_event_id) : null;
+		const unread = Boolean(last && last.senderId !== self && lastRead != null && last.eventId > lastRead);
+		out.push({
+			id: cid,
+			handle: String(u.screen_name ?? other.screen_name ?? otherId),
+			name: String(u.name ?? ""),
+			last_text: last?.text ?? null,
+			last_sender: last ? (last.senderId === self ? "you" : String(users[last.senderId]?.screen_name ?? last.senderId)) : null,
+			last_at: last?.time ?? null,
+			unread,
+		});
+	}
+	return out.sort((a, b) => (b.last_at ?? "").localeCompare(a.last_at ?? ""));
+}
+
 function trendFromItem(o: J): Trend {
 	const ctx: string | undefined = o.social_context?.text ?? undefined;
 	const parts = ctx ? ctx.split("·").map((s: string) => s.trim()) : [];

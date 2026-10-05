@@ -11,6 +11,8 @@ export type PageRequest =
 	| { kind: "graphql"; op: string; vars: Record<string, unknown>; method?: "GET" | "POST" }
 	| { kind: "rest"; path: string }
 	| { kind: "discover"; refresh?: boolean }
+	| { kind: "dm"; recipientId: string; text: string }
+	| { kind: "dmInbox" }
 	| { kind: "dom"; fn: DomFn };
 
 export interface RateLimit {
@@ -49,15 +51,22 @@ export const PAGE_RUNTIME = String.raw`async function (req) {
   function hasTwid() { return /(?:^|;\s*)twid=/.test(document.cookie); }
   async function discover(force) {
     if (W.__pix && !force) return W.__pix;
-    var srcs = [].slice.call(document.scripts).map(function (s) { return s.src || ""; });
-    var main = srcs.filter(function (s) { return /\/main\.[^\/]*\.js/.test(s); })[0];
-    if (!main) return { ops: {}, bearer: null, error: "main bundle script not found" };
-    var js = await (await fetch(main)).text();
-    var ops = {}, m;
-    var re = /queryId:"([^"]+)",operationName:"([^"]+)",operationType:"(\w+)",metadata:\{featureSwitches:\[([^\]]*)\],fieldToggles:\[([^\]]*)\]/g;
-    while ((m = re.exec(js))) ops[m[2]] = { id: m[1], type: m[3], features: strs(m[4]), toggles: strs(m[5]) };
-    var b = js.match(/"(AAAAAAAAAAAAAAAAAAAAA[^"]+)"/);
-    var res = { ops: ops, bearer: b ? decodeURIComponent(b[1]) : null, error: null };
+    var srcs = [].slice.call(document.scripts).map(function (s) { return s.src || ""; }).filter(function (s) {
+      return /^https?:\/\//.test(s) && /\.js(\?|$)/.test(s) && !/\/locales?\//.test(s);
+    });
+    if (!srcs.length) return { ops: {}, bearer: null, error: "no JS bundles found" };
+    var ops = {}, m, b = null, i;
+    var strict = /queryId:"([^"]+)",operationName:"([^"]+)",operationType:"(\w+)",metadata:\{featureSwitches:\[([^\]]*)\],fieldToggles:\[([^\]]*)\]/g;
+    var broad = /queryId:"([^"]+)",operationName:"([^"]+)",operationType:"(\w+)"/g;
+    for (i = 0; i < srcs.length; i++) {
+      var js;
+      try { js = await (await fetch(srcs[i])).text(); } catch (e) { continue; }
+      if (!b) { var bm = js.match(/"(AAAAAAAAAAAAAAAAAAAAA[^"]+)"/); if (bm) b = decodeURIComponent(bm[1]); }
+      strict.lastIndex = 0; broad.lastIndex = 0;
+      while ((m = strict.exec(js))) ops[m[2]] = { id: m[1], type: m[3], features: strs(m[4]), toggles: strs(m[5]) };
+      while ((m = broad.exec(js))) { if (!ops[m[2]]) ops[m[2]] = { id: m[1], type: m[3], features: [], toggles: [] }; }
+    }
+    var res = { ops: ops, bearer: b, error: null };
     if (Object.keys(ops).length) W.__pix = res;
     return res;
   }
@@ -97,6 +106,25 @@ export const PAGE_RUNTIME = String.raw`async function (req) {
       if (o) res = await callOp(o, op, vars, method);
     }
     return res;
+  }
+  async function sendDm(recipientId, text) {
+    var inbox = await api("/i/api/1.1/dm/inbox_initial_state.json", "GET");
+    var conversationId = null;
+    if (inbox.ok && inbox.data && inbox.data.inbox_initial_state) {
+      var convs = inbox.data.inbox_initial_state.conversations || {};
+      var cid, parts, i;
+      for (cid in convs) {
+        parts = convs[cid] && convs[cid].participants ? convs[cid].participants : [];
+        for (i = 0; i < parts.length; i++) {
+          if (parts[i] && String(parts[i].user_id) === String(recipientId)) { conversationId = cid; break; }
+        }
+        if (conversationId) break;
+      }
+    }
+    var body = { text: text, cards_platform: "Web-12", include_cards: 1, include_quote_count: true, dm_users: false };
+    if (conversationId) { body.conversation_id = conversationId; body.recipient_ids = false; }
+    else { body.recipient_ids = String(recipientId); }
+    return await api("/i/api/1.1/dm/new2.json", "POST", JSON.stringify(body));
   }
   var DOM = {
     classify: function () {
@@ -142,6 +170,8 @@ export const PAGE_RUNTIME = String.raw`async function (req) {
     }
     if (req.kind === "graphql") return await graphql(req.op, req.vars, req.method);
     if (req.kind === "rest") return await api(req.path, "GET");
+    if (req.kind === "dm") return await sendDm(req.recipientId, req.text);
+    if (req.kind === "dmInbox") return await api("/i/api/1.1/dm/inbox_initial_state.json", "GET");
     if (req.kind === "dom") return { ok: true, status: 200, data: DOM[req.fn]() };
     return { ok: false, status: 0, error: "invalid_input: unknown request kind" };
   } catch (e) {

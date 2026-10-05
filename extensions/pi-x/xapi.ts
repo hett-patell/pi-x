@@ -110,6 +110,16 @@ export class Engine {
 		return this.request(a, { kind: "rest", path }, opts);
 	}
 
+	/** Send a direct message via X's internal REST endpoint (create/reuse conversation, then send). */
+	async dm(a: Account, recipientId: string, text: string, opts: CallOptions = {}): Promise<unknown> {
+		return this.request(a, { kind: "dm", recipientId, text }, opts);
+	}
+
+	/** Raw DM inbox state (conversations, entries, users) from X's REST endpoint. */
+	async dmInbox(a: Account, opts: CallOptions = {}): Promise<unknown> {
+		return this.request(a, { kind: "dmInbox" }, opts);
+	}
+
 	async dom<T>(a: Account, fn: DomFn, opts: CallOptions = {}): Promise<T> {
 		const res = await this.raw(a, { kind: "dom", fn }, opts);
 		if (!res.ok) throw new XError("dom_changed", res.error ?? `DOM ${fn} failed`);

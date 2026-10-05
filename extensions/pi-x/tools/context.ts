@@ -5,7 +5,7 @@ import { toXError, XError } from "../errors.ts";
 import type { Place, TimelinePage, Tweet } from "../normalize.ts";
 import type { Engine } from "../xapi.ts";
 
-export type EngineLike = Pick<Engine, "graphql" | "rest" | "dom" | "discover" | "viewer" | "rate">;
+export type EngineLike = Pick<Engine, "graphql" | "rest" | "dom" | "discover" | "viewer" | "dm" | "dmInbox" | "rate">;
 export type SessionsLike = Pick<Sessions, "ensure" | "open" | "scroll" | "launch" | "close" | "closeAll" | "closeByName" | "list" | "saveState" | "loadState">;
 
 export interface ToolDeps {

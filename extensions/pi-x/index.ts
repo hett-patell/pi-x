@@ -12,6 +12,7 @@ import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
 import { FIXES } from "./errors.ts";
 import { errorOutput, type Progress, readConfig, type ToolOutput } from "./tools/context.ts";
+import { runDm, runDmInbox } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runSearch } from "./tools/search.ts";
 import { runTrending } from "./tools/trending.ts";
@@ -61,6 +62,16 @@ const TweetParams = Type.Object({
 const UserParams = Type.Object({
 	username: Type.String({ description: "Handle, @handle, or x.com/<user> URL." }),
 	posts: Type.Optional(Type.Number({ description: "Also fetch their recent posts with stats (0–100, default 0).", minimum: 0, maximum: 100 })),
+	account: Account,
+});
+
+const DmParams = Type.Object({
+	to: Type.String({ description: "Recipient handle, @handle, or x.com/<user> URL." }),
+	text: Type.String({ description: "Direct message text to send (max 10,000 characters)." }),
+	account: Account,
+});
+
+const DmInboxParams = Type.Object({
 	account: Account,
 });
 
@@ -159,6 +170,31 @@ export default function piX(pi: ExtensionAPI) {
 		promptGuidelines: ["Use x_user for credibility/context on an account before quoting it."],
 		parameters: UserParams,
 		execute: tool((p, s, prog) => runUser(deps, p, s, prog)),
+	});
+
+	pi.registerTool({
+		name: "x_dm",
+		label: "X: Send DM",
+		description:
+			"Send a direct message to an X account via your logged-in session. Requires write mode (opt-in): run /x write on first. " +
+			"Resolves the recipient, then creates/reuses the 1:1 conversation and sends the message through X's internal API.",
+		promptSnippet: "x_dm(to, text, account?) — send a direct message.",
+		promptGuidelines: [
+			"Only send a DM when the user explicitly asks for it. Write mode (/x write on) must be enabled first; otherwise the tool errors with write_disabled.",
+		],
+		parameters: DmParams,
+		execute: tool((p, s, prog) => runDm(deps, p, s, prog)),
+	});
+
+	pi.registerTool({
+		name: "x_dm_inbox",
+		label: "X: DM Inbox",
+		description:
+			"List your recent X direct-message conversations (1:1) with the other participant, the last message, and unread status. Read-only — does not send anything.",
+		promptSnippet: "x_dm_inbox(account?) — list recent DMs and unread.",
+		promptGuidelines: ["Use x_dm_inbox when the user asks about their DMs, unread/pending messages, or who last messaged them."],
+		parameters: DmInboxParams,
+		execute: tool((p, s, prog) => runDmInbox(deps, p, s, prog)),
 	});
 
 	pi.registerTool({

@@ -2,11 +2,44 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-	keywordQuery, matchLocation, parseCompact, parseConversation, parseExploreTabs, parsePlaceTrends, parseTimeline,
+	keywordQuery, matchLocation, parseCompact, parseConversation, parseDmInbox, parseExploreTabs, parsePlaceTrends, parseTimeline,
 	parseTrendTimeline, parseUser, tweetFromResult, tweetFromSyndication, type Place,
 } from "../extensions/pi-x/normalize.ts";
 
 const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8"));
+
+test("parseDmInbox extracts 1:1 conversations, last message, and unread", () => {
+	const inbox = {
+		inbox_initial_state: {
+			conversations: {
+				"1-2": { type: "ONE_TO_ONE", participants: [{ user_id: "1" }, { user_id: "2" }], last_read_event_id: "100" },
+				"1-3": { type: "ONE_TO_ONE", participants: [{ user_id: "1" }, { user_id: "3" }], last_read_event_id: "300" },
+				"1-4": { type: "GROUP_DM", participants: [{ user_id: "1" }, { user_id: "4" }] },
+			},
+			entries: [
+				{ message: { id: "101", conversation_id: "1-2", message_data: { text: "hello", sender_id: "2", time: "1735192645000" } } },
+				{ message: { id: "102", conversation_id: "1-2", message_data: { text: "hi back", sender_id: "1", time: "1735192650000" } } },
+				{ message: { id: "301", conversation_id: "1-3", message_data: { text: "yo", sender_id: "3", time: "1735192700000" } } },
+			],
+			users: {
+				"1": { screen_name: "me", name: "Me" },
+				"2": { screen_name: "alice", name: "Alice" },
+				"3": { screen_name: "bob", name: "Bob" },
+				"4": { screen_name: "group" },
+			},
+		},
+	};
+	const out = parseDmInbox(inbox, "1");
+	assert.equal(out.length, 2); // group DM skipped
+	const c12 = out.find((c) => c.handle === "alice")!;
+	assert.equal(c12.last_text, "hi back");
+	assert.equal(c12.last_sender, "you");
+	assert.equal(c12.unread, false);
+	const c13 = out.find((c) => c.handle === "bob")!;
+	assert.equal(c13.last_text, "yo");
+	assert.equal(c13.last_sender, "bob");
+	assert.equal(c13.unread, true);
+});
 
 test("parseCompact is locale-tolerant", () => {
 	const cases: [string, number | undefined][] = [

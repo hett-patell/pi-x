@@ -18,6 +18,8 @@ export interface Config {
 	accounts: Account[];
 	active?: string;
 	trendsLocation?: string;
+	/** Opt-in write mode (enables DM sending). Default false — pi-x is read-only unless enabled. */
+	write?: boolean;
 }
 
 export interface Paths {
@@ -81,6 +83,7 @@ export function validateConfig(raw: unknown): Config {
 	const cfg: Config = { version: 1, accounts };
 	if (typeof r.active === "string" && accounts.some((a) => a.name === r.active)) cfg.active = r.active;
 	if (typeof r.trendsLocation === "string" && r.trendsLocation.trim()) cfg.trendsLocation = r.trendsLocation.trim();
+	if (r.write === true) cfg.write = true;
 	return cfg;
 }
 

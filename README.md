@@ -50,7 +50,7 @@ sampled live from X. No scraped HTML dump, no "I don't have access to real-time 
 - **Multi-account rotation** — add several accounts; pi-x rotates and backs off on rate limits.
 - **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never
   extracts your cookies or sends them anywhere.
-- **Read-only** — no posting, liking, following, or DMing, ever.
+- **Read-only by default** — no posting, liking, or following. Direct messages are opt-in via `/x write on`.
 
 ## How pi-x compares
 
@@ -183,7 +183,7 @@ locks are per process, and exiting one Pi closes the pi-x browser sessions the o
   private; anyone holding it can use your X session.
 - Config (`~/.pi/agent/pi-x/config.json`) is written `0600`.
 - Proxy credentials are masked in every message, log, and tool output.
-- All tools are read-only: no posting, liking, following, or DMing.
+- All tools are read-only by default: no posting, liking, or following. `x_dm` sends direct messages only after you enable write mode with `/x write on`.
 - Use a secondary/burner X account if you're not comfortable connecting your main one.
 - You're responsible for respecting X's Terms of Service and rate limits — pi-x backs off on
   rate limits automatically but doesn't bypass them.
