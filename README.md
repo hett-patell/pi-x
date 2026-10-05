@@ -133,7 +133,7 @@ What's trending on X right now, and why?
 - "What's trending on X right now, and why?"
 - "What's trending in India today?" *(location trends by place name or WOEID)*
 - "What's in the news on X?" *(`tab: "news"`)*
-- "What are people saying about the new iPhone — is sentiment positive or negative?"
+- "What are people saying about the new iPhone, and what are the main complaints?"
 - "Search X for 'AI agents', top posts, min 20 likes"
 - "Find recent posts about the earthquake, excluding retweets, last 24 hours"
 - "Summarize this thread: https://x.com/user/status/12345" *(with reply reactions)*
@@ -215,7 +215,7 @@ know:
 | `aborted` | Cancelled — no action needed |
 | `not_found` | Check the ID/handle — the post or account may be deleted, protected, or suspended |
 | `api_changed` | X changed its internal API. Run `x_doctor`; tools fall back to page scraping where possible |
-| `dom_changed` | X changed its page layout. Run `x_doctor`; patch `extensions/pi-x/dom.ts` and `/reload` |
+| `dom_changed` | X changed its page layout. Run `x_doctor`, update pi-x (`pi update`), or report it at https://github.com/hett-patell/pi-x/issues |
 | `invalid_input` | Fix the parameters and retry |
 | `network` | Check your connection/proxy and retry |
 

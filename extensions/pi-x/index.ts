@@ -123,9 +123,7 @@ export default function piX(pi: ExtensionAPI) {
 			"Personalized Explore by default, or any location. Set drilldown to sample top posts and explain WHY topics trend. Marks trends that are NEW since the last call.",
 		promptSnippet: "x_trending(location?, tab?, drilldown?) — what's hot on X now (+ news, + why).",
 		promptGuidelines: [
-			"For 'what's trending / hot / happening on X' use x_trending first; use drilldown: 3 (or x_search on a trend's query with type 'Top') to explain why.",
-			"Write insights, not dumps: headline, volume & velocity, sentiment split, themes, top voices, 2–3 notable quotes with URLs, caveats (sample size, bots, promoted).",
-			"If a tool returns not_logged_in, tell the user to run /x login.",
+			"Follow the pi-x skill for routing and for how to report results. Without `location`, results are that account's personalized Explore — say so.",
 		],
 		parameters: TrendingParams,
 		execute: tool((p, s, prog) => runTrending(deps, p, s, prog)),
@@ -138,11 +136,7 @@ export default function piX(pi: ExtensionAPI) {
 			"Search X posts with filters (from/to/mentions, since/until, lang, min_likes, media/links, exclude replies/retweets, verified, near). " +
 			"Paginates up to 300 posts and returns computed stats: volume & posts/hour, engagement totals and medians, top voices, hashtags, linked sites, top posts, earliest notable post.",
 		promptSnippet: "x_search(query, type?, limit?, filters…) — search X posts with stats.",
-		promptGuidelines: [
-			"Use type 'Top' for 'what are people saying' and 'Latest' for 'what's happening right now'.",
-			"Prefer filters over hand-written operators; use min_likes to cut noise.",
-			"Base claims on the stats block and quote posts with their URLs.",
-		],
+		promptGuidelines: ["Follow the pi-x skill for routing and for how to report results (stats describe the returned sample)."],
 		parameters: SearchParams,
 		execute: tool((p, s, prog) => runSearch(deps, p, s, prog)),
 	});
@@ -152,7 +146,7 @@ export default function piX(pi: ExtensionAPI) {
 		label: "X: Post",
 		description: "Read one X post by ID/URL with full engagement and quoted post. With replies > 0, also returns the author's thread and top replies ranked by engagement.",
 		promptSnippet: "x_tweet(id_or_url, replies?) — read a post (+ thread & top replies).",
-		promptGuidelines: ["Use x_tweet whenever the user shares an x.com or twitter.com status URL."],
+		promptGuidelines: ["Use x_tweet whenever the user shares an x.com or twitter.com status URL; replies: 0 needs no login."],
 		parameters: TweetParams,
 		execute: tool((p, s, prog) => runTweet(deps, p, s, prog)),
 	});

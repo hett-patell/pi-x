@@ -24,7 +24,7 @@ export const FIXES: Record<XErrorCode, string> = {
 	aborted: "Cancelled.",
 	not_found: "Check the ID/handle — the post or account may be deleted, protected, or suspended",
 	api_changed: "X changed its internal API. Run x_doctor; tools fall back to page scraping where possible",
-	dom_changed: "X changed its page layout. Run x_doctor; patch extensions/pi-x/dom.ts and /reload",
+	dom_changed: "X changed its page layout. Run x_doctor, update pi-x (pi update), or report it at https://github.com/hett-patell/pi-x/issues",
 	invalid_input: "Fix the parameters and retry",
 	network: "Check your connection/proxy and retry",
 };

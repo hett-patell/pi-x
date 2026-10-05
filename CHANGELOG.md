@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.1 — 2026-10-05
+
+### Changed
+- Rewrote the `pi-x` skill so agents report results accurately. They now:
+  - say whose trends they are (account Explore vs. worldwide / a place);
+  - describe stance by counting posts instead of inventing sentiment percentages;
+  - read sample stats correctly;
+  - fetch less by default, and size the answer to the question;
+  - relay each error's fix line instead of editing the installed package.
+- Tool `promptGuidelines` now defer to the skill (one source of truth).
+- `dom_changed` fix hint points users to `pi update` / issues instead of patching package files.
+
 ## 1.0.0 — 2026-10-01
 
 Complete rewrite.
