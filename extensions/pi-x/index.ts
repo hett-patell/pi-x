@@ -21,9 +21,9 @@ import { runUser } from "./tools/user.ts";
 const Account = Type.Optional(Type.String({ description: "Pin a specific pi-x account (see /x status). Omit to auto-pick/rotate." }));
 
 const TrendingParams = Type.Object({
-	location: Type.Optional(Type.String({ description: "Place name or WOEID: 'worldwide', 'United States', 'India', 'London', '23424977'. Omit for the account's personalized Explore (or the /x location default)." })),
+	location: Type.Optional(Type.String({ description: "Place name or WOEID: 'worldwide', 'United States', 'India', 'London', '23424977'. Omit to use the /x location default (personalized Explore if none is saved); 'default' forces personalized Explore." })),
 	tab: Type.Optional(StringEnum(["trending", "news", "sports", "entertainment"] as const, { description: "Explore tab (personalized mode only). Default 'trending'." })),
-	include_news: Type.Optional(Type.Boolean({ description: "Also list X News stories (default true)." })),
+	include_news: Type.Optional(Type.Boolean({ description: "Also list X News stories (default true). Personalized Explore only — place trends have no news." })),
 	limit: Type.Optional(Type.Number({ description: "Max trends (default 20, max 50).", minimum: 1, maximum: 50 })),
 	drilldown: Type.Optional(Type.Number({ description: "Sample top posts for the top N trends to explain WHY they trend (0–5, default 0). Slower.", minimum: 0, maximum: 5 })),
 	account: Account,
@@ -123,7 +123,7 @@ export default function piX(pi: ExtensionAPI) {
 			"Personalized Explore by default, or any location. Set drilldown to sample top posts and explain WHY topics trend. Marks trends that are NEW since the last call.",
 		promptSnippet: "x_trending(location?, tab?, drilldown?) — what's hot on X now (+ news, + why).",
 		promptGuidelines: [
-			"Follow the pi-x skill for routing and for how to report results. Without `location`, results are that account's personalized Explore — say so.",
+			"Follow the pi-x skill for routing and reporting. Without `location`, the /x location default applies; personalized Explore (with news and tabs) only when none is saved or location is \"default\". State the scope shown in the header.",
 		],
 		parameters: TrendingParams,
 		execute: tool((p, s, prog) => runTrending(deps, p, s, prog)),

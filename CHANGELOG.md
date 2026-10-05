@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.2 — 2026-10-05
+
+### Fixed
+- Skill routing:
+  - `x_trending()` without a location uses the `/x location` default; it is personalized Explore only when no default is saved.
+  - News, sports and entertainment exist only on personalized Explore, so those requests pass `location: "default"`.
+  - The x_trending guideline and the `location` / `include_news` descriptions now say the same.
+- Skill counting rule:
+  - Stance is counted only from posts whose text is shown ("of the posts shown (from N sampled)").
+  - Percentages the stats block printed, such as verified share, are repeated as-is.
+
 ## 1.0.1 — 2026-10-05
 
 ### Changed

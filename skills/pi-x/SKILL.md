@@ -14,10 +14,10 @@ Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`. Read-only: nev
 
 | User asks | Call |
 |---|---|
-| What's trending (no place) | `x_trending()` — this is **that account's personalized Explore**, not worldwide |
-| What's trending worldwide / in a place | `x_trending({ location: "worldwide" \| "India" \| … })` |
-| News on X | `x_trending()` already lists News stories (`include_news` defaults to true). `tab: "news"` only for news-only on personalized Explore |
-| Sports / entertainment | `x_trending({ tab: "sports" \| "entertainment" })` — personalized only; `tab` is ignored when `location` is set |
+| What's trending (no place) | `x_trending()` — uses the `/x location` default; **personalized Explore only when no default is saved**. Not worldwide unless the default is |
+| What's trending worldwide / in a place | `x_trending({ location: "worldwide" \| "India" \| … })` — place trends only: no news, no tabs |
+| News on X | `x_trending({ location: "default" })` — forces personalized Explore, which lists News stories (`include_news` defaults to true). Add `tab: "news"` for news-only |
+| Sports / entertainment | `x_trending({ location: "default", tab: "sports" \| "entertainment" })` — these tabs exist only on personalized Explore |
 | Why is X trending | `drilldown: 1–3` on `x_trending`, **or** one `x_search(trend.query, type: "Top")` — not both |
 | What are people saying about T | one `x_search(T, type: "Top")` (default limit). Add `type: "Latest"` only if they asked "right now", or the Top sample is old/thin |
 | A post URL / ID | `x_tweet(url)` — no login needed when `replies` is 0. Add `replies` only if they asked for reactions |
@@ -33,9 +33,10 @@ Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`. Read-only: nev
 
 **Say whose trends they are.** Copy the header's scope: "on account X's Explore" or "worldwide" / the place.
 
-**Counts, not guesses.** No tool measures sentiment. Describe stance only by counting posts you were given:
-"of the N posts returned, K were giveaway entries / K criticised Y". Never write a percentage you didn't count.
-A drill-down prints only its top 3 posts of the N sampled — say "of the 3 posts shown (from N sampled)".
+**Counts, not guesses.** No tool measures sentiment or stance. Count stance only from posts whose text appears in
+the result, and name that number: "of the 12 posts shown, 5 were giveaway entries". When the result shows fewer posts
+than it sampled (`+N omitted`, or a drill-down's top 3), say so: "of the 3 posts shown (from 20 sampled)".
+Repeat percentages the stats block printed (e.g. `verified authors 70%`); invent no others.
 
 **Read the stats correctly:**
 - `per_hour`, medians, `verified authors` describe the **returned sample**. Trend volume ("24K posts") is X's own count. Keep them separate.
