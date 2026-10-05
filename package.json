@@ -1,5 +1,5 @@
 {
-  "name": "pi-x",
+  "name": "@hett/pi-x",
   "version": "1.0.0",
   "description": "X (Twitter) for Pi agents — trending topics & news with 'why it's trending' drill-down, search, threads, profiles. No API keys: uses your logged-in browser session.",
   "type": "module",

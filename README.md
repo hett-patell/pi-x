@@ -4,7 +4,8 @@
 
 [![pi-package](https://img.shields.io/badge/pi-package-blueviolet?style=flat-square)](https://pi.dev/packages)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-85%20passing-brightgreen?style=flat-square)](./test)
+[![tests](https://img.shields.io/badge/tests-98%20passing-brightgreen?style=flat-square)](./test)
+[![npm](https://img.shields.io/npm/v/@hett/pi-x?style=flat-square)](https://www.npmjs.com/package/@hett/pi-x)
 
 pi-x is a [Pi](https://pi.dev) extension that lets your coding agent read X (Twitter) through
 **your own logged-in browser session** — trending topics and news, keyword search with real
@@ -76,9 +77,11 @@ npm i -g agent-browser && agent-browser install
 Then, in Pi:
 
 ```bash
-pi install git:github.com/hett-patell/pi-x
+pi install npm:@hett/pi-x
 # or try it once without installing:
-pi -e git:github.com/hett-patell/pi-x
+pi -e npm:@hett/pi-x
+# or track the latest main branch:
+pi install git:github.com/hett-patell/pi-x
 ```
 
 ## Quick start
