@@ -10,6 +10,7 @@ export interface FakeHandlers {
 	rest?: (path: string) => unknown;
 	dm?: (recipientId: string, text: string, account: string) => unknown;
 	dmInbox?: (account: string) => unknown;
+	dmConversation?: (conversationId: string, account: string) => unknown;
 	dom?: (fn: string) => unknown;
 	viewer?: (account: string) => { id: string; handle: string } | null;
 	fetch?: (url: string) => { status: number; body: string };
@@ -31,6 +32,7 @@ export function fakeDeps(h: FakeHandlers = {}, cfg?: Config): ToolDeps & { calls
 			rest: async (a, path) => { calls.push(`${a.name}:rest:${path}`); return h.rest!(path); },
 			dm: async (a, recipientId, text) => { calls.push(`${a.name}:dm:${recipientId}`); return h.dm!(recipientId, text, a.name); },
 			dmInbox: async (a) => { calls.push(`${a.name}:dmInbox`); return h.dmInbox ? h.dmInbox(a.name) : { inbox_initial_state: { conversations: {}, entries: [], users: {} } }; },
+			dmConversation: async (a, cid) => { calls.push(`${a.name}:dmConversation:${cid}`); return h.dmConversation ? h.dmConversation(cid, a.name) : { conversation_timeline: { entries: [], users: {} } }; },
 			dom: async <T>(a: { name: string }, fn: string) => { calls.push(`${a.name}:dom:${fn}`); return h.dom!(fn) as T; },
 			discover: async () => ({ ops: ["SearchTimeline", "TweetDetail", "UserByScreenName", "UserTweets", "ExplorePage", "GenericTimelineById", "Viewer"], bearer: true, ct0: true, error: null }),
 			viewer: async (a) => (h.viewer ? h.viewer(a.name) : { id: "1", handle: "tester" }),

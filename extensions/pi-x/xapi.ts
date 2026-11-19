@@ -124,6 +124,11 @@ export class Engine {
 		return this.request(a, { kind: "dmInbox" }, opts);
 	}
 
+	/** Raw DM conversation messages from X's REST endpoint. */
+	async dmConversation(a: Account, conversationId: string, opts: CallOptions = {}): Promise<unknown> {
+		return this.request(a, { kind: "dmConversation", conversationId }, opts);
+	}
+
 	async dom<T>(a: Account, fn: DomFn, opts: CallOptions = {}): Promise<T> {
 		const res = await this.raw(a, { kind: "dom", fn }, opts);
 		if (!res.ok) throw new XError("dom_changed", res.error ?? `DOM ${fn} failed`);

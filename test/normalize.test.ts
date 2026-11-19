@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-	keywordQuery, matchLocation, parseCompact, parseConversation, parseDmInbox, parseExploreTabs, parsePlaceTrends, parseTimeline,
-	parseTrendTimeline, parseUser, tweetFromResult, tweetFromSyndication, type Place,
+	keywordQuery, matchLocation, parseCompact, parseConversation, parseDmInbox, parseDmThread, parseExploreTabs, parsePlaceTrends, parseTimeline,
+	parseTrendTimeline, parseUser, parseUserList, tweetFromResult, tweetFromSyndication, type Place,
 } from "../extensions/pi-x/normalize.ts";
 
 const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8"));
@@ -147,4 +147,101 @@ test("matchLocation", () => {
 	assert.equal(w("lon"), 44418);
 	assert.equal(w("2295411"), 2295411);
 	assert.equal(matchLocation(places, "atlantis"), null);
+});
+
+test("parseDmThread extracts messages sorted oldest first", () => {
+	const json = {
+		conversation_timeline: {
+			entries: [
+				{ message: { id: "200", message_data: { text: "second", sender_id: "2", time: "1735192700000" } } },
+				{ message: { id: "100", message_data: { text: "first", sender_id: "1", time: "1735192645000" } } },
+				{ message: { id: "300", message_data: { text: "third", sender_id: "1", time: "1735192800000", attachment: { media: { media_url_https: "https://pbs.twimg.com/media/abc.jpg" } } } } },
+			],
+			users: {
+				"1": { screen_name: "alice", name: "Alice" },
+				"2": { screen_name: "bob", name: "Bob" },
+			},
+		},
+	};
+	const { messages, users } = parseDmThread(json);
+	assert.equal(messages.length, 3);
+	assert.equal(messages[0].text, "first");
+	assert.equal(messages[0].sender_handle, "alice");
+	assert.equal(messages[1].text, "second");
+	assert.equal(messages[2].text, "third");
+	assert.deepEqual(messages[2].media_urls, ["https://pbs.twimg.com/media/abc.jpg"]);
+	assert.equal(users["1"].handle, "alice");
+	assert.equal(users["2"].handle, "bob");
+});
+
+test("parseDmThread handles empty / missing data", () => {
+	assert.deepEqual(parseDmThread(null), { messages: [], users: {} });
+	assert.deepEqual(parseDmThread({}), { messages: [], users: {} });
+	assert.deepEqual(parseDmThread({ conversation_timeline: {} }).messages, []);
+});
+
+test("parseUserList extracts users and bottom cursor", () => {
+	const json = {
+		data: {
+			user: {
+				result: {
+					timeline: {
+						timeline: {
+							instructions: [
+								{
+									entries: [
+										{
+											content: {
+												itemContent: {
+													user_results: {
+														result: {
+															__typename: "User",
+															rest_id: "123",
+															legacy: { screen_name: "user1", name: "User One", verified: false, protected: false, followers_count: 100, friends_count: 50, statuses_count: 10, description: "hi", created_at: "Mon Jan 01 00:00:00 +0000 2020" },
+															is_blue_verified: true,
+														},
+													},
+												},
+											},
+										},
+										{
+											content: {
+												itemContent: {
+													user_results: {
+														result: {
+															__typename: "User",
+															rest_id: "456",
+															legacy: { screen_name: "user2", name: "User Two", verified: false, protected: false, followers_count: 200, friends_count: 100, statuses_count: 20, description: "hey" },
+														},
+													},
+												},
+											},
+										},
+										{
+											content: {
+												cursorType: "Bottom",
+												value: "abc123cursor",
+											},
+										},
+									],
+								},
+							],
+						},
+					},
+				},
+			},
+		},
+	};
+	const { users, cursor } = parseUserList(json);
+	assert.equal(users.length, 2);
+	assert.equal(users[0].handle, "user1");
+	assert.equal(users[0].verified, true); // is_blue_verified
+	assert.equal(users[1].handle, "user2");
+	assert.equal(cursor, "abc123cursor");
+});
+
+test("parseUserList handles empty data", () => {
+	const { users, cursor } = parseUserList({});
+	assert.equal(users.length, 0);
+	assert.equal(cursor, null);
 });

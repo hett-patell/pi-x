@@ -132,6 +132,17 @@ test("dm reuses an existing conversation id", async () => {
 	assert.equal(JSON.parse(c.init!.body!).text, "Hi");
 });
 
+test("dmConversation fetches conversation messages", async () => {
+	const body = JSON.stringify({ conversation_timeline: { entries: [{ message: { id: "1", message_data: { text: "hello", sender_id: "42", time: "1735192645000" } } }], users: { "42": { screen_name: "alice" } } } });
+	install([{ status: 200, body }]);
+	const r = await run({ kind: "dmConversation", conversationId: "11-22" });
+	assert.equal(r.ok, true);
+	assert.equal(r.data.conversation_timeline.entries.length, 1);
+	const c = calls.find((x) => x.url.includes("/dm/conversation/"))!;
+	assert.ok(c.url.includes("11-22"));
+	assert.equal(c.init?.method, "GET");
+});
+
 test("dom classify reports login state from cookies + path", async () => {
 	install([]);
 	const r = await run({ kind: "dom", fn: "classify" });

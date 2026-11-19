@@ -1,6 +1,6 @@
 import { orderAccounts } from "../accounts.ts";
 import { XError } from "../errors.ts";
-import { parseDmInbox, parseUser } from "../normalize.ts";
+import { parseDmInbox, parseDmThread, parseUser } from "../normalize.ts";
 import { readConfig, type Progress, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
 import { parseUsername } from "./user.ts";
 
@@ -130,4 +130,63 @@ export async function runDmInbox(
 	}
 	if (!convs.length) lines.push("(no DM conversations)");
 	return { text: lines.join("\n"), details: { account: account.name, conversations: convs } };
+}
+
+/** Read the full message thread for a 1:1 DM conversation. */
+export async function runDmThread(
+	deps: ToolDeps,
+	p: { with: string; limit?: number; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+): Promise<ToolOutput> {
+	requireDmAccess(deps);
+	const handle = parseUsername(p.with);
+	const limit = Math.min(Math.max(p.limit ?? 50, 1), 200);
+
+	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+		// 1. Get viewer id
+		progress?.("loading viewer…");
+		const viewer = await deps.engine.viewer(a, { signal });
+		const selfId = viewer?.id ?? "";
+
+		// 2. Find conversation id from inbox
+		progress?.("finding conversation…");
+		const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, { signal }));
+		if (!user) throw new XError("not_found", `@${handle} not found`);
+
+		const inboxData = await deps.engine.dmInbox(a, { signal });
+		const convs = parseDmInbox(inboxData, selfId);
+		// Match by user id in conversation id (format: "smallerId-largerId")
+		let convId: string | null = null;
+		for (const c of convs) {
+			if (c.handle.toLowerCase() === handle.toLowerCase()) {
+				convId = c.id;
+				break;
+			}
+		}
+		if (!convId) {
+			// Try constructing it from user ids
+			const ids = [selfId, user.id].sort((a, b) => Number(BigInt(a) - BigInt(b)) || a.localeCompare(b));
+			convId = `${ids[0]}-${ids[1]}`;
+		}
+
+		// 3. Fetch conversation messages
+		progress?.("loading messages…");
+		const data = await deps.engine.dmConversation(a, convId, { signal });
+		const { messages, users } = parseDmThread(data);
+
+		return { messages: messages.slice(-limit), users, selfId, otherHandle: user.handle };
+	});
+
+	const msgs = value.messages;
+	const from = `@${account.handle ?? account.name}`;
+	const lines = [`DM thread with @${value.otherHandle} — ${from}`, `${msgs.length} messages${msgs.length >= limit ? " (showing latest)" : ""}`, ""];
+	for (const m of msgs) {
+		const who = m.sender_id === value.selfId ? "you" : `@${m.sender_handle}`;
+		const time = m.created_at ? m.created_at.slice(0, 16).replace("T", " ") : "?";
+		lines.push(`[${time}] ${who}: ${m.text}`);
+		for (const url of m.media_urls) lines.push(`   📎 ${url}`);
+	}
+	if (!msgs.length) lines.push("(no messages found)");
+	return { text: lines.join("\n"), details: { account: account.name, with: value.otherHandle, messages: msgs } };
 }

@@ -342,6 +342,71 @@ export function parseDmInbox(json: unknown, selfId: string): DmConversation[] {
 	return out.sort((a, b) => (b.last_at ?? "").localeCompare(a.last_at ?? ""));
 }
 
+export interface DmMessage {
+	id: string;
+	text: string;
+	sender_id: string;
+	sender_handle: string;
+	created_at: string | null;
+	media_urls: string[];
+}
+
+/** Parse messages from X's `/dm/conversation/{id}.json` response. */
+export function parseDmThread(json: unknown): { messages: DmMessage[]; users: Record<string, { handle: string; name: string }> } {
+	const state = (json as J)?.conversation_timeline;
+	if (!state) return { messages: [], users: {} };
+	const entries = (state.entries ?? []) as J[];
+	const rawUsers = (state.users ?? {}) as Record<string, J>;
+
+	const users: Record<string, { handle: string; name: string }> = {};
+	for (const [uid, u] of Object.entries(rawUsers)) {
+		users[uid] = { handle: String(u.screen_name ?? uid), name: String(u.name ?? "") };
+	}
+
+	const messages: DmMessage[] = [];
+	for (const e of entries) {
+		const msg = e?.message ?? {};
+		const md = msg.message_data ?? {};
+		const senderId = String(md.sender_id ?? "");
+		if (!senderId) continue;
+		const mediaUrls: string[] = [];
+		for (const m of (md.attachment?.media ? [md.attachment.media] : []) as J[]) {
+			if (m?.media_url_https) mediaUrls.push(String(m.media_url_https));
+		}
+		messages.push({
+			id: String(msg.id ?? md.id ?? ""),
+			text: typeof md.text === "string" ? md.text : "",
+			sender_id: senderId,
+			sender_handle: users[senderId]?.handle ?? senderId,
+			created_at: dmTime(md.time),
+			media_urls: mediaUrls,
+		});
+	}
+	// Sort oldest first
+	messages.sort((a, b) => compareIds(a.id, b.id));
+	return { messages, users };
+}
+
+/** Parse a list of users from Followers/Following GraphQL timeline payloads. */
+export function parseUserList(json: unknown): { users: XUser[]; cursor: string | null } {
+	const users: XUser[] = [];
+	const seen = new Set<string>();
+	let cursor: string | null = null;
+	walk(json, (o) => {
+		if (o.user_results && typeof o.user_results === "object") {
+			const u = userFromResult(o.user_results.result);
+			if (u && !seen.has(u.id)) {
+				seen.add(u.id);
+				users.push(u);
+			}
+			return false;
+		}
+		if (o.cursorType === "Bottom" && typeof o.value === "string") cursor = o.value;
+		return true;
+	});
+	return { users, cursor };
+}
+
 function trendFromItem(o: J): Trend {
 	const ctx: string | undefined = o.social_context?.text ?? undefined;
 	const parts = ctx ? ctx.split("·").map((s: string) => s.trim()) : [];
