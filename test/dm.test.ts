@@ -13,6 +13,7 @@ const twoAccounts = (over: Partial<Config> = {}): Config => ({
 	version: 1,
 	accounts: [{ name: "a", enabled: true, handle: "alice" }, { name: "b", enabled: true, handle: "bob" }],
 	write: true,
+	active: "a",
 	...over,
 });
 
@@ -109,4 +110,20 @@ test("parseDmInbox uses numeric order for latest message and unread", () => {
 	const [c] = parseDmInbox(inbox, "1");
 	assert.equal(c.last_text, "newer");
 	assert.equal(c.unread, true);
+});
+
+test("x_dm with two accounts and no pin/active asks for disambiguation", async () => {
+	const deps = fakeDeps({ graphql: () => user("42", "target"), dm: () => ({ conversation_id: "1-42" }) }, twoAccounts({ active: undefined }));
+	await assert.rejects(
+		runDm(deps, { to: "target", text: "hi" }, undefined, undefined, async () => true),
+		(e: XError) => e.code === "invalid_input" && /which one/.test(e.message),
+	);
+	assert.ok(!deps.calls.some((c) => c.includes(":dm:")));
+});
+
+test("x_dm with two accounts uses explicit account param", async () => {
+	const deps = fakeDeps({ graphql: () => user("42", "target"), dm: () => ({ conversation_id: "1-42" }) }, twoAccounts({ active: undefined }));
+	const out = await runDm(deps, { to: "target", text: "hi", account: "b" }, undefined, undefined, async () => true);
+	assert.equal(out.details.sent, true);
+	assert.deepEqual(deps.calls.filter((c) => c.includes(":dm:")), ["b:dm:42"]);
 });

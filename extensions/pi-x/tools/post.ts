@@ -1,6 +1,5 @@
-import { orderAccounts } from "../accounts.ts";
 import { XError } from "../errors.ts";
-import { readConfig, type Progress, type ToolDeps, type ToolOutput } from "./context.ts";
+import { personalAccount, type PickAccount, readConfig, type Progress, type ToolDeps, type ToolOutput } from "./context.ts";
 import type { ConfirmSend } from "./dm.ts";
 import { parseTweetId } from "./tweet.ts";
 
@@ -14,7 +13,7 @@ function requireWriteAccess(deps: ToolDeps): void {
 
 /**
  * Post a tweet, reply, or quote-tweet. Same safety rules as x_dm:
- * - exactly one account (named, else active, else first enabled) — never rotated;
+ * - exactly one account (see personalAccount) — never rotated;
  * - the post runs once — no re-run after a failed page script, no rate-limit retry;
  * - every post is confirmed by the user, unless `/x write on --no-confirm` was set.
  */
@@ -24,6 +23,7 @@ export async function runPost(
 	signal?: AbortSignal,
 	progress?: Progress,
 	confirm?: ConfirmSend,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	const text = (p.text ?? "").trim();
 	if (!text) throw new XError("invalid_input", "Post text is empty");
@@ -41,7 +41,7 @@ export async function runPost(
 	const replyTo = p.reply_to ? parseTweetId(p.reply_to) : null;
 	const quoteUrl = p.quote ? `https://x.com/i/status/${parseTweetId(p.quote)}` : null;
 
-	const a = orderAccounts(cfg, p.account)[0];
+	const a = await personalAccount(deps, p.account, pick);
 	const from = `@${a.handle ?? a.name}`;
 	const result = await deps.locks.run(a.name, async () => {
 		if (confirm && !cfg.writeNoConfirm) {
@@ -92,11 +92,12 @@ export async function runLike(
 	signal?: AbortSignal,
 	progress?: Progress,
 	confirm?: ConfirmSend,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	requireWriteAccess(deps);
 	const cfg = readConfig(deps);
 	const id = parseTweetId(p.id_or_url);
-	const a = orderAccounts(cfg, p.account)[0];
+	const a = await personalAccount(deps, p.account, pick);
 	const from = `@${a.handle ?? a.name}`;
 
 	if (confirm && !cfg.writeNoConfirm) {
@@ -120,11 +121,12 @@ export async function runRetweet(
 	signal?: AbortSignal,
 	progress?: Progress,
 	confirm?: ConfirmSend,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	requireWriteAccess(deps);
 	const cfg = readConfig(deps);
 	const id = parseTweetId(p.id_or_url);
-	const a = orderAccounts(cfg, p.account)[0];
+	const a = await personalAccount(deps, p.account, pick);
 	const from = `@${a.handle ?? a.name}`;
 
 	if (confirm && !cfg.writeNoConfirm) {
@@ -148,11 +150,12 @@ export async function runBookmarkAdd(
 	signal?: AbortSignal,
 	progress?: Progress,
 	confirm?: ConfirmSend,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	requireWriteAccess(deps);
 	const cfg = readConfig(deps);
 	const id = parseTweetId(p.id_or_url);
-	const a = orderAccounts(cfg, p.account)[0];
+	const a = await personalAccount(deps, p.account, pick);
 	const from = `@${a.handle ?? a.name}`;
 
 	if (confirm && !cfg.writeNoConfirm) {

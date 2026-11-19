@@ -1,7 +1,6 @@
-import { orderAccounts } from "../accounts.ts";
 import { XError } from "../errors.ts";
 import { parseDmInbox, parseDmThread, parseUser } from "../normalize.ts";
-import { readConfig, type Progress, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
+import { personalAccount, type PickAccount, readConfig, type Progress, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
 import { parseUsername } from "./user.ts";
 
 const MAX_TEXT = 10_000;
@@ -41,7 +40,7 @@ function requireDmAccess(deps: ToolDeps): void {
 
 /**
  * Send one DM. Writes are deliberately different from reads:
- * - exactly one account (named, else active, else first enabled) — never rotated to another account;
+ * - exactly one account (see personalAccount: named, only, pinned, chosen, or asked) — never rotated;
  * - the send runs once — no re-run after a failed page script, no rate-limit retry (no duplicates);
  * - every send is confirmed by the user, unless `/x write on --no-confirm` was set.
  */
@@ -51,6 +50,7 @@ export async function runDm(
 	signal?: AbortSignal,
 	progress?: Progress,
 	confirm?: ConfirmSend,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	const handle = parseUsername(p.to);
 	const text = (p.text ?? "").trim();
@@ -66,7 +66,7 @@ export async function runDm(
 		);
 	}
 
-	const a = orderAccounts(cfg, p.account)[0];
+	const a = await personalAccount(deps, p.account, pick);
 	const from = `@${a.handle ?? a.name}`;
 	const result = await deps.locks.run(a.name, async () => {
 		progress?.("resolving recipient…");
@@ -111,9 +111,11 @@ export async function runDmInbox(
 	p: { account?: string },
 	signal?: AbortSignal,
 	progress?: Progress,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	requireDmAccess(deps);
-	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+	const pinned = await personalAccount(deps, p.account, pick);
+	const { value, account } = await withAccount(deps, pinned.name, signal, async (a) => {
 		progress?.("loading inbox…");
 		const viewer = await deps.engine.viewer(a, { signal });
 		const data = await deps.engine.dmInbox(a, { signal });
@@ -138,12 +140,14 @@ export async function runDmThread(
 	p: { with: string; limit?: number; account?: string },
 	signal?: AbortSignal,
 	progress?: Progress,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	requireDmAccess(deps);
 	const handle = parseUsername(p.with);
 	const limit = Math.min(Math.max(p.limit ?? 50, 1), 200);
+	const pinned = await personalAccount(deps, p.account, pick);
 
-	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+	const { value, account } = await withAccount(deps, pinned.name, signal, async (a) => {
 		// 1. Get viewer id
 		progress?.("loading viewer…");
 		const viewer = await deps.engine.viewer(a, { signal });

@@ -1,4 +1,4 @@
-import { orderAccounts } from "../accounts.ts";
+import { accountList, findAccount, orderAccounts } from "../accounts.ts";
 import type { AccountLocks, BinarySpec, Runner, Sessions } from "../browser.ts";
 import { type Account, type Config, loadConfig, type Paths, updateAccount } from "../config.ts";
 import { toXError, XError } from "../errors.ts";
@@ -34,6 +34,56 @@ export type Progress = (msg: string) => void;
 
 export function readConfig(deps: ToolDeps): Config {
 	return loadConfig(deps.paths, deps.legacyHome).config;
+}
+
+/** Ask the human to choose one option (ctx.ui.select). Absent when there is no interactive UI. */
+export type PickAccount = (title: string, options: string[]) => Promise<string | undefined>;
+
+/** Per-session account the user chose for personal tools (cleared by /x use). */
+const chosen = new WeakMap<ToolDeps, string>();
+
+export function forgetAccountChoice(deps: ToolDeps): void {
+	chosen.delete(deps);
+}
+
+export function rememberedAccount(deps: ToolDeps): string | undefined {
+	return chosen.get(deps);
+}
+
+/**
+ * The account for personal data and actions — DMs, home feed, bookmarks, posting, likes.
+ * Never rotated and never guessed: an explicit account (name or @handle); else the only connected
+ * account; else the /x use pin; else the account chosen earlier this session; else ask the user.
+ * Without a UI to ask, it fails and lists the accounts so the caller can pass one.
+ */
+export async function personalAccount(deps: ToolDeps, requested: string | undefined, pick?: PickAccount): Promise<Account> {
+	const cfg = readConfig(deps);
+	if (requested) {
+		const a = findAccount(cfg, requested);
+		if (!a) throw new XError("invalid_input", `Unknown X account "${requested}"`, `Your accounts: ${accountList(cfg)}`);
+		if (!a.handle) throw new XError("not_logged_in", `Account "${a.name}" isn't connected`, `Run /x login ${a.name}`);
+		return a;
+	}
+	const connected = cfg.accounts.filter((a) => a.enabled && a.handle);
+	if (!connected.length) throw new XError("not_logged_in", "No connected X account", "Run /x login");
+	if (connected.length === 1) return connected[0];
+	const pinned = connected.find((a) => a.name === cfg.active);
+	if (pinned) return pinned;
+	const remembered = connected.find((a) => a.name === chosen.get(deps));
+	if (remembered) return remembered;
+	if (!pick) {
+		throw new XError(
+			"invalid_input",
+			`${connected.length} X accounts are connected — which one?`,
+			`Pass account: ${connected.map((a) => `"${a.name}" (@${a.handle})`).join(" or ")}, or pin one with /x use <account>`,
+		);
+	}
+	const labels = connected.map((a) => `@${a.handle} (${a.name})`);
+	const choice = await pick("Which X account? (remembered this session · /x use <account> to pin)", labels);
+	const a = choice ? connected[labels.indexOf(choice)] : undefined;
+	if (!a) throw new XError("aborted", "No X account chosen");
+	chosen.set(deps, a.name);
+	return a;
 }
 
 /** Run fn on the best account; rotate to the next one on account-level failures. */

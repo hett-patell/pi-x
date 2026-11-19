@@ -3,17 +3,19 @@ import { fitToBudget, formatStats, formatTweet, OUTPUT_BUDGET } from "../format.
 import { parseTimeline, type Tweet } from "../normalize.ts";
 import { collapseDuplicates, computeStats, scoreAll, sortTweets } from "../score.ts";
 import { clamp } from "../util.ts";
-import { type Progress, paginate, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
+import { type Progress, paginate, type ToolDeps, type ToolOutput, withAccount, personalAccount, type PickAccount } from "./context.ts";
 
 export async function runHome(
 	deps: ToolDeps,
 	p: { limit?: number; sort?: "recent" | "engagement"; account?: string },
 	signal?: AbortSignal,
 	progress?: Progress,
+	pick?: PickAccount,
 ): Promise<ToolOutput> {
 	const limit = clamp(p.limit ?? 40, 1, 200);
 
-	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+	const pinned = await personalAccount(deps, p.account, pick);
+	const { value, account } = await withAccount(deps, pinned.name, signal, async (a) => {
 		const r = await paginate(
 			async (cursor) =>
 				parseTimeline(

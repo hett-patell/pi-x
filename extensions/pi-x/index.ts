@@ -6,13 +6,13 @@
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, getAgentDir, truncateHead } from "@earendil-works/pi-coding-agent";
-import { orderAccounts, scrubSecrets } from "./accounts.ts";
+import { scrubSecrets } from "./accounts.ts";
 import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } from "./commands.ts";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
 import { FIXES, toXError, XError } from "./errors.ts";
 import { parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
-import { errorOutput, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
+import { errorOutput, personalAccount, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runPost, runLike, runRetweet, runBookmarkAdd } from "./tools/post.ts";
@@ -425,58 +425,37 @@ export default function piX(pi: ExtensionAPI) {
 					return;
 				}
 
-				// Pick account: check if first arg matches an account name, otherwise prompt
-				const connected = cfg.accounts.filter((a) => a.enabled && a.handle);
+				// Pick account: check if first arg matches an account name, otherwise use personalAccount
 				let pinnedAccountName: string | undefined;
 				let initialUser: string | undefined;
 
 				// Parse args: /x dm [account] [user]
-				// If first arg matches an account name, use it; remaining arg is the user
 				const firstArg = cmd.args[0];
 				const secondArg = cmd.args[1];
-				// An arg names one of our accounts if it equals the account name or its @handle.
-				const findOwn = (arg: string) => {
-					const s = arg.trim().replace(/^@/, "").toLowerCase();
-					return cfg.accounts.find((a) => a.name.toLowerCase() === s || a.handle?.toLowerCase() === s);
-				};
-				const accountList = cfg.accounts.map((a) => `${a.name}${a.handle ? ` (@${a.handle})` : " (not connected)"}`).join(", ");
 				try {
 					if (firstArg) {
-						const own = findOwn(firstArg);
+						// Try as account name/handle first
+						const own = cfg.accounts.find((a) => {
+							const s = firstArg.trim().replace(/^@/, "").toLowerCase();
+							return a.name.toLowerCase() === s || a.handle?.toLowerCase() === s;
+						});
 						if (own) {
-							if (!own.handle) throw new XError("not_logged_in", `Account "${own.name}" isn't connected`, `Run /x login ${own.name}`);
-							if (!own.enabled) throw new XError("invalid_input", `Account "${own.name}" is disabled`, `Run /x enable ${own.name}`);
 							pinnedAccountName = own.name;
 							if (secondArg) initialUser = parseUsername(secondArg);
-						} else if (/^@?[A-Za-z0-9_]{1,15}$/.test(firstArg) || /(?:x|twitter)\.com\//i.test(firstArg)) {
-							// Not one of our accounts → the person to DM
-							initialUser = parseUsername(firstArg);
-							if (secondArg) throw new XError("invalid_input", `"${firstArg}" isn't one of your accounts`, `Your accounts: ${accountList}`);
 						} else {
-							throw new XError("invalid_input", `No account or X user "${firstArg}"`, `Usage: /x dm [account] [user] · your accounts: ${accountList}`);
+							initialUser = parseUsername(firstArg);
 						}
 					}
+					// Use personalAccount for consistent disambiguation (shows picker when needed)
+					const pick = async (title: string, options: string[]) => ctx.ui.select(title, options);
+					const pinned = await personalAccount(deps, pinnedAccountName, pick);
+					pinnedAccountName = pinned.name;
 				} catch (e) {
 					const x = toXError(e);
+					if (x.code === "aborted") return; // user cancelled picker
 					ctx.ui.notify(`${x.message}${x.fix ? ` — ${x.fix}` : ""}`, "error");
 					return;
 				}
-
-				// If no account pinned yet, prompt when multiple connected
-				if (!pinnedAccountName) {
-					if (connected.length > 1) {
-						const choice = await ctx.ui.select(
-							"Open DMs for which account?",
-							connected.map((a) => `@${a.handle} (${a.name})`),
-						);
-						if (!choice) return; // user cancelled
-						const match = choice.match(/\(([^)]+)\)$/);
-						pinnedAccountName = match ? match[1] : connected[0].name;
-					} else if (connected.length === 1) {
-						pinnedAccountName = connected[0].name;
-					}
-				}
-				// pinnedAccountName is undefined only if no accounts are connected — withAccount will error
 				const actions: DmChatActions = {
 					loadInbox: async () => {
 						const { value } = await withAccount(deps, pinnedAccountName, undefined, async (a) => {
@@ -510,7 +489,7 @@ export default function piX(pi: ExtensionAPI) {
 					},
 					sendMessage: async (handle: string, text: string) => {
 						try {
-							const a = orderAccounts(readConfig(deps), pinnedAccountName)[0];
+							const a = await personalAccount(deps, pinnedAccountName);
 							const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, {}));
 							if (!user) return { ok: false, error: `@${handle} not found` };
 							await deps.engine.dm(a, user.id, text, {});
