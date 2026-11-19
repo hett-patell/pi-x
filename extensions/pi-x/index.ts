@@ -424,10 +424,27 @@ export default function piX(pi: ExtensionAPI) {
 					ctx.ui.notify("DM access is off. Run /x write on to enable it.", "error");
 					return;
 				}
+
+				// Pick account: if multiple connected accounts, let the user choose
+				const connected = cfg.accounts.filter((a) => a.enabled && a.handle);
+				let pinnedAccountName: string | undefined;
+				if (connected.length > 1) {
+					const choice = await ctx.ui.select(
+						"Open DMs for which account?",
+						connected.map((a) => `@${a.handle} (${a.name})`),
+					);
+					if (!choice) return; // user cancelled
+					const match = choice.match(/\(([^)]+)\)$/);
+					pinnedAccountName = match ? match[1] : connected[0].name;
+				} else if (connected.length === 1) {
+					pinnedAccountName = connected[0].name;
+				}
+				// pinnedAccountName is undefined only if no accounts are connected — withAccount will error
+
 				const initialUser = cmd.args[0] ? parseUsername(cmd.args[0]) : undefined;
 				const actions: DmChatActions = {
 					loadInbox: async () => {
-						const { value, account } = await withAccount(deps, undefined, undefined, async (a) => {
+						const { value } = await withAccount(deps, pinnedAccountName, undefined, async (a) => {
 							const viewer = await deps.engine.viewer(a, {});
 							const data = await deps.engine.dmInbox(a, {});
 							return { conversations: parseDmInbox(data, viewer?.id ?? ""), selfId: viewer?.id ?? "", accountLabel: a.handle ?? a.name };
@@ -435,7 +452,7 @@ export default function piX(pi: ExtensionAPI) {
 						return value;
 					},
 					loadThread: async (handle: string) => {
-						const { value } = await withAccount(deps, undefined, undefined, async (a) => {
+						const { value } = await withAccount(deps, pinnedAccountName, undefined, async (a) => {
 							const viewer = await deps.engine.viewer(a, {});
 							const selfId = viewer?.id ?? "";
 							const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, {}));
@@ -458,7 +475,7 @@ export default function piX(pi: ExtensionAPI) {
 					},
 					sendMessage: async (handle: string, text: string) => {
 						try {
-							const a = orderAccounts(readConfig(deps))[0];
+							const a = orderAccounts(readConfig(deps), pinnedAccountName)[0];
 							const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, {}));
 							if (!user) return { ok: false, error: `@${handle} not found` };
 							await deps.engine.dm(a, user.id, text, {});
