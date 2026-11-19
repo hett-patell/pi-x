@@ -13,7 +13,7 @@ export type PageRequest =
 	| { kind: "discover"; refresh?: boolean }
 	| { kind: "dm"; recipientId: string; text: string }
 	| { kind: "dmInbox" }
-	| { kind: "dmConversation"; conversationId: string }
+	| { kind: "dmConversation"; conversationId: string; maxId?: string }
 	| { kind: "dom"; fn: DomFn };
 
 export interface RateLimit {
@@ -172,8 +172,8 @@ export const PAGE_RUNTIME = String.raw`async function (req) {
     if (req.kind === "graphql") return await graphql(req.op, req.vars, req.method);
     if (req.kind === "rest") return await api(req.path, "GET");
     if (req.kind === "dm") return await sendDm(req.recipientId, req.text);
-    if (req.kind === "dmInbox") return await api("/i/api/1.1/dm/inbox_initial_state.json", "GET");
-    if (req.kind === "dmConversation") return await api("/i/api/1.1/dm/conversation/" + encodeURIComponent(req.conversationId) + ".json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&include_ext_is_blue_verified=1&skip_status=1&dm_secret_conversations_enabled=false&krs_registration_enabled=true&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_ext_limited_action_results=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_ext_views=true&dm_users=false&include_groups=true&include_inbox_timelines=true&include_ext_media_color=true&include_ext_media_availability=true&include_ext_sensitive_media_warning=true&include_ext_trusted_friends_metadata=true&ext=mediaColor,altText,mediaStats,highlightedLabel,voiceInfo,birdwatchPivot,superFollowMetadata,unmentionInfo,editControl,article&count=50", "GET");
+    if (req.kind === "dmInbox") return await api("/i/api/1.1/dm/inbox_initial_state.json?dm_secret_conversations_enabled=true&krs_registration_enabled=true&include_groups=true", "GET");
+    if (req.kind === "dmConversation") { var dq = "/i/api/1.1/dm/conversation/" + encodeURIComponent(req.conversationId) + ".json?include_profile_interstitial_type=1&include_blocking=1&include_blocked_by=1&include_followed_by=1&include_want_retweets=1&include_mute_edge=1&include_can_dm=1&include_can_media_tag=1&include_ext_is_blue_verified=1&skip_status=1&dm_secret_conversations_enabled=true&krs_registration_enabled=true&cards_platform=Web-12&include_cards=1&include_ext_alt_text=true&include_ext_limited_action_results=true&include_quote_count=true&include_reply_count=1&tweet_mode=extended&include_ext_views=true&dm_users=false&include_groups=true&include_inbox_timelines=true&include_ext_media_color=true&include_ext_media_availability=true&include_ext_sensitive_media_warning=true&include_ext_trusted_friends_metadata=true&ext=mediaColor,altText,mediaStats,highlightedLabel,voiceInfo,birdwatchPivot,superFollowMetadata,unmentionInfo,editControl,article&count=50"; if (req.maxId) dq += "&max_id=" + encodeURIComponent(req.maxId); return await api(dq, "GET"); }
     if (req.kind === "dom") return { ok: true, status: 200, data: DOM[req.fn]() };
     return { ok: false, status: 0, error: "invalid_input: unknown request kind" };
   } catch (e) {

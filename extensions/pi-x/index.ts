@@ -11,7 +11,7 @@ import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } fr
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
 import { FIXES, toXError, XError } from "./errors.ts";
-import { parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
+import { compareIds, type DmMessage, parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
 import { errorOutput, personalAccount, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
@@ -482,8 +482,23 @@ export default function piX(pi: ExtensionAPI) {
 								convId = `${ids[0]}-${ids[1]}`;
 							}
 							const data = await deps.engine.dmConversation(a, convId, {});
-							const { messages } = parseDmThread(data);
-							return { messages, selfId, otherHandle: user.handle };
+							const allMessages: DmMessage[] = [];
+							const { messages: firstMessages, minEntryId: firstCursor } = parseDmThread(data);
+							allMessages.push(...firstMessages);
+							// Paginate to load full history (up to 10 pages × 50 = 500 messages for TUI)
+							let cursor = firstCursor;
+							for (let page = 0; page < 9 && cursor && allMessages.length < 500; page++) {
+								const more = await deps.engine.dmConversation(a, convId, { maxId: cursor });
+								const { messages: moreMessages, minEntryId: nextCursor } = parseDmThread(more);
+								if (!moreMessages.length) break;
+								allMessages.push(...moreMessages);
+								cursor = nextCursor;
+							}
+							// Deduplicate and sort
+							const seen = new Set<string>();
+							const deduped = allMessages.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+							deduped.sort((a, b) => compareIds(a.id, b.id));
+							return { messages: deduped, selfId, otherHandle: user.handle };
 						});
 						return value;
 					},

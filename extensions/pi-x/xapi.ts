@@ -125,8 +125,8 @@ export class Engine {
 	}
 
 	/** Raw DM conversation messages from X's REST endpoint. */
-	async dmConversation(a: Account, conversationId: string, opts: CallOptions = {}): Promise<unknown> {
-		return this.request(a, { kind: "dmConversation", conversationId }, opts);
+	async dmConversation(a: Account, conversationId: string, opts: CallOptions & { maxId?: string } = {}): Promise<unknown> {
+		return this.request(a, { kind: "dmConversation", conversationId, maxId: opts.maxId }, opts);
 	}
 
 	async dom<T>(a: Account, fn: DomFn, opts: CallOptions = {}): Promise<T> {

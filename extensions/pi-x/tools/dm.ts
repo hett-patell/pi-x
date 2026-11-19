@@ -1,5 +1,5 @@
 import { XError } from "../errors.ts";
-import { parseDmInbox, parseDmThread, parseUser } from "../normalize.ts";
+import { compareIds, type DmMessage, parseDmInbox, parseDmThread, parseUser } from "../normalize.ts";
 import { personalAccount, type PickAccount, readConfig, type Progress, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
 import { parseUsername } from "./user.ts";
 
@@ -174,12 +174,28 @@ export async function runDmThread(
 			convId = `${ids[0]}-${ids[1]}`;
 		}
 
-		// 3. Fetch conversation messages
+		// 3. Fetch conversation messages with pagination
 		progress?.("loading messages…");
-		const data = await deps.engine.dmConversation(a, convId, { signal });
-		const { messages, users } = parseDmThread(data);
+		const allMessages: DmMessage[] = [];
+		const allUsers: Record<string, { handle: string; name: string }> = {};
+		let maxId: string | undefined;
+		const MAX_PAGES = 20; // safety cap: 20 pages × 50 = 1000 messages max
+		for (let page = 0; page < MAX_PAGES; page++) {
+			const data = await deps.engine.dmConversation(a, convId, { signal, maxId });
+			const { messages, users, minEntryId } = parseDmThread(data);
+			Object.assign(allUsers, users);
+			allMessages.push(...messages);
+			if (!minEntryId || messages.length === 0) break; // no more pages
+			if (allMessages.length >= limit) break; // have enough
+			maxId = minEntryId;
+			progress?.(`loading messages… (${allMessages.length} so far)`);
+		}
+		// Deduplicate by id (pages may overlap at boundaries)
+		const seen = new Set<string>();
+		const deduped = allMessages.filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+		deduped.sort((a, b) => compareIds(a.id, b.id));
 
-		return { messages: messages.slice(-limit), users, selfId, otherHandle: user.handle };
+		return { messages: deduped.slice(-limit), users: allUsers, selfId, otherHandle: user.handle };
 	});
 
 	const msgs = value.messages;
@@ -188,7 +204,8 @@ export async function runDmThread(
 	for (const m of msgs) {
 		const who = m.sender_id === value.selfId ? "you" : `@${m.sender_handle}`;
 		const time = m.created_at ? m.created_at.slice(0, 16).replace("T", " ") : "?";
-		lines.push(`[${time}] ${who}: ${m.text}`);
+		const prefix = m.encrypted ? "🔒 " : "";
+		lines.push(`[${time}] ${who}: ${prefix}${m.text}`);
 		for (const url of m.media_urls) lines.push(`   📎 ${url}`);
 	}
 	if (!msgs.length) lines.push("(no messages found)");

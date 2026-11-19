@@ -175,9 +175,45 @@ test("parseDmThread extracts messages sorted oldest first", () => {
 });
 
 test("parseDmThread handles empty / missing data", () => {
-	assert.deepEqual(parseDmThread(null), { messages: [], users: {} });
-	assert.deepEqual(parseDmThread({}), { messages: [], users: {} });
+	assert.deepEqual(parseDmThread(null), { messages: [], users: {}, minEntryId: null });
+	assert.deepEqual(parseDmThread({}), { messages: [], users: {}, minEntryId: null });
 	assert.deepEqual(parseDmThread({ conversation_timeline: {} }).messages, []);
+});
+
+test("parseDmThread returns minEntryId for pagination", () => {
+	const json = {
+		conversation_timeline: {
+			min_entry_id: "900",
+			entries: [
+				{ message: { id: "1000", message_data: { text: "hello", sender_id: "1", time: "1700000000000" } } },
+			],
+			users: { "1": { screen_name: "alice", name: "Alice" } },
+		},
+	};
+	const result = parseDmThread(json);
+	assert.equal(result.minEntryId, "900");
+	assert.equal(result.messages.length, 1);
+});
+
+test("parseDmThread handles encrypted messages", () => {
+	const json = {
+		conversation_timeline: {
+			entries: [
+				{ message: { id: "100", message_data: { text: "normal", sender_id: "1", time: "1700000000000" } } },
+				{ message_encrypted: { id: "101", message_data: { text: "decrypted text", sender_id: "2", time: "1700000001000" } } },
+				{ encrypted_message: { id: "102", sender_id: "1", time: "1700000002000" } },
+			],
+			users: { "1": { screen_name: "alice", name: "Alice" }, "2": { screen_name: "bob", name: "Bob" } },
+		},
+	};
+	const result = parseDmThread(json);
+	assert.equal(result.messages.length, 3);
+	assert.equal(result.messages[0].text, "normal");
+	assert.equal(result.messages[0].encrypted, undefined);
+	assert.equal(result.messages[1].text, "decrypted text");
+	assert.equal(result.messages[1].encrypted, true);
+	assert.equal(result.messages[2].text, "\ud83d\udd12 [encrypted message]");
+	assert.equal(result.messages[2].encrypted, true);
 });
 
 test("parseUserList extracts users and bottom cursor", () => {

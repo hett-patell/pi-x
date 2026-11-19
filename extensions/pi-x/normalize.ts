@@ -303,18 +303,20 @@ export function parseDmInbox(json: unknown, selfId: string): DmConversation[] {
 
 	const lastByConv = new Map<string, { eventId: string; text: string; senderId: string; time: string | null }>();
 	for (const e of entries) {
-		const msg = e?.message ?? {};
+		// Handle both regular and encrypted inbox entries
+		const msg = e?.message ?? e?.message_encrypted ?? e?.encrypted_message ?? {};
 		const cid = String(msg.conversation_id ?? "");
 		if (!cid) continue;
 		const md = msg.message_data ?? {};
 		const eventId = String(msg.id ?? md.id ?? "");
 		const cur = lastByConv.get(cid);
 		if (cur && compareIds(cur.eventId, eventId) >= 0) continue;
+		const isEncrypted = Boolean(e?.message_encrypted || e?.encrypted_message);
 		lastByConv.set(cid, {
 			eventId,
-			text: typeof md.text === "string" ? md.text : "",
-			senderId: String(md.sender_id ?? ""),
-			time: dmTime(md.time),
+			text: typeof md.text === "string" ? md.text : (isEncrypted ? "🔒 [encrypted]" : ""),
+			senderId: String(md.sender_id ?? msg.sender_id ?? ""),
+			time: dmTime(md.time ?? msg.time),
 		});
 	}
 
@@ -349,12 +351,13 @@ export interface DmMessage {
 	sender_handle: string;
 	created_at: string | null;
 	media_urls: string[];
+	encrypted?: boolean;
 }
 
-/** Parse messages from X's `/dm/conversation/{id}.json` response. */
-export function parseDmThread(json: unknown): { messages: DmMessage[]; users: Record<string, { handle: string; name: string }> } {
+/** Parse messages from X's `/dm/conversation/{id}.json` response. Returns messages + a `minEntryId` cursor for pagination (null when no more pages). */
+export function parseDmThread(json: unknown): { messages: DmMessage[]; users: Record<string, { handle: string; name: string }>; minEntryId: string | null } {
 	const state = (json as J)?.conversation_timeline;
-	if (!state) return { messages: [], users: {} };
+	if (!state) return { messages: [], users: {}, minEntryId: null };
 	const entries = (state.entries ?? []) as J[];
 	const rawUsers = (state.users ?? {}) as Record<string, J>;
 
@@ -363,11 +366,34 @@ export function parseDmThread(json: unknown): { messages: DmMessage[]; users: Re
 		users[uid] = { handle: String(u.screen_name ?? uid), name: String(u.name ?? "") };
 	}
 
+	// Extract min_entry_id for pagination (fetch older messages)
+	const minEntryId: string | null = typeof state.min_entry_id === "string" ? state.min_entry_id : null;
+
 	const messages: DmMessage[] = [];
 	for (const e of entries) {
+		// Regular unencrypted messages
 		const msg = e?.message ?? {};
 		const md = msg.message_data ?? {};
 		const senderId = String(md.sender_id ?? "");
+
+		// Encrypted messages have a different entry shape
+		if (e?.message_encrypted || e?.encrypted_message) {
+			const enc = e.message_encrypted ?? e.encrypted_message ?? {};
+			const encMd = enc.message_data ?? {};
+			const encSender = String(encMd.sender_id ?? enc.sender_id ?? "");
+			if (!encSender) continue;
+			messages.push({
+				id: String(enc.id ?? ""),
+				text: typeof encMd.text === "string" ? encMd.text : "🔒 [encrypted message]",
+				sender_id: encSender,
+				sender_handle: users[encSender]?.handle ?? encSender,
+				created_at: dmTime(encMd.time ?? enc.time),
+				media_urls: [],
+				encrypted: true,
+			});
+			continue;
+		}
+
 		if (!senderId) continue;
 		const mediaUrls: string[] = [];
 		for (const m of (md.attachment?.media ? [md.attachment.media] : []) as J[]) {
@@ -384,7 +410,7 @@ export function parseDmThread(json: unknown): { messages: DmMessage[]; users: Re
 	}
 	// Sort oldest first
 	messages.sort((a, b) => compareIds(a.id, b.id));
-	return { messages, users };
+	return { messages, users, minEntryId };
 }
 
 /** Parse a list of users from Followers/Following GraphQL timeline payloads. */
