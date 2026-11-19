@@ -37,7 +37,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "doctor", usage: "/x doctor", help: "Full health check with fixes" },
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
-	{ name: "dm", usage: "/x dm [account] [user]", help: "Interactive DM chat overlay — picks account when multiple are logged in" },
+	{ name: "dm", usage: "/x dm [account] [user]", help: "Interactive DM chat overlay — picks account when multiple are logged in", takesAccount: true },
 	{ name: "close", usage: "/x close", help: "Close all pi-x browser windows" },
 	{ name: "help", usage: "/x help", help: "Show all commands" },
 ];

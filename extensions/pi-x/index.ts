@@ -10,7 +10,7 @@ import { orderAccounts, scrubSecrets } from "./accounts.ts";
 import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } from "./commands.ts";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
-import { FIXES, XError } from "./errors.ts";
+import { FIXES, toXError, XError } from "./errors.ts";
 import { parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
 import { errorOutput, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
@@ -434,15 +434,32 @@ export default function piX(pi: ExtensionAPI) {
 				// If first arg matches an account name, use it; remaining arg is the user
 				const firstArg = cmd.args[0];
 				const secondArg = cmd.args[1];
-				if (firstArg) {
-					const matchedAccount = connected.find((a) => a.name.toLowerCase() === firstArg.toLowerCase());
-					if (matchedAccount) {
-						pinnedAccountName = matchedAccount.name;
-						initialUser = secondArg ? parseUsername(secondArg) : undefined;
-					} else {
-						// First arg is a user handle, not an account
-						initialUser = parseUsername(firstArg);
+				// An arg names one of our accounts if it equals the account name or its @handle.
+				const findOwn = (arg: string) => {
+					const s = arg.trim().replace(/^@/, "").toLowerCase();
+					return cfg.accounts.find((a) => a.name.toLowerCase() === s || a.handle?.toLowerCase() === s);
+				};
+				const accountList = cfg.accounts.map((a) => `${a.name}${a.handle ? ` (@${a.handle})` : " (not connected)"}`).join(", ");
+				try {
+					if (firstArg) {
+						const own = findOwn(firstArg);
+						if (own) {
+							if (!own.handle) throw new XError("not_logged_in", `Account "${own.name}" isn't connected`, `Run /x login ${own.name}`);
+							if (!own.enabled) throw new XError("invalid_input", `Account "${own.name}" is disabled`, `Run /x enable ${own.name}`);
+							pinnedAccountName = own.name;
+							if (secondArg) initialUser = parseUsername(secondArg);
+						} else if (/^@?[A-Za-z0-9_]{1,15}$/.test(firstArg) || /(?:x|twitter)\.com\//i.test(firstArg)) {
+							// Not one of our accounts → the person to DM
+							initialUser = parseUsername(firstArg);
+							if (secondArg) throw new XError("invalid_input", `"${firstArg}" isn't one of your accounts`, `Your accounts: ${accountList}`);
+						} else {
+							throw new XError("invalid_input", `No account or X user "${firstArg}"`, `Usage: /x dm [account] [user] · your accounts: ${accountList}`);
+						}
 					}
+				} catch (e) {
+					const x = toXError(e);
+					ctx.ui.notify(`${x.message}${x.fix ? ` — ${x.fix}` : ""}`, "error");
+					return;
 				}
 
 				// If no account pinned yet, prompt when multiple connected
