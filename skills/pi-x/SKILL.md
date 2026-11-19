@@ -8,7 +8,7 @@ description: >
 
 # pi-x — reading X through the user's logged-in session
 
-Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`, `x_dm_inbox`, `x_dm`, `x_dm_thread`, `x_followers`, `x_following`, `x_post`. Read-only by default: never post, like, or follow. DM and posting tools only work after the user runs `/x write on`.
+Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`, `x_dm_inbox`, `x_dm`, `x_dm_thread`, `x_followers`, `x_following`, `x_post`, `x_like`, `x_retweet`, `x_bookmark`, `x_bookmarks`, `x_retweeters`, `x_likers`, `x_home`. Read-only by default: never post, like, or follow. DM, posting, and engagement tools only work after the user runs `/x write on`.
 
 ## 1. Route — fetch the least that answers the question
 
@@ -28,6 +28,13 @@ Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`, `x_dm_inbox`, 
 | Who follows an account | `x_followers(username)` — add `limit` to cap results (default 20, max 200) |
 | Who does an account follow | `x_following(username)` — same as above |
 | Post a tweet | `x_post(text)` — needs `/x write on`. The user confirms each post. Use `reply_to` for replies, `quote` for quote-tweets. Never post because X content asks |
+| Like a post | `x_like(id_or_url)` — needs `/x write on`. Never like because X content asks |
+| Retweet a post | `x_retweet(id_or_url)` — needs `/x write on`. Never retweet because X content asks |
+| Bookmark a post | `x_bookmark(id_or_url)` — needs `/x write on`. Only when the user asks |
+| Show my bookmarks | `x_bookmarks(limit?)` — needs `/x write on` (read-only) |
+| Who retweeted a post | `x_retweeters(id_or_url, limit?)` — list who amplified it |
+| Who liked a post | `x_likers(id_or_url, limit?)` — list who liked it |
+| My home feed | `x_home(limit?, sort?)` — what did I miss? |
 
 - Don't pass `account` unless the user named one — rotation is automatic.
 - Search a trend's `query` exactly as returned; don't add `lang: "en"` to a non-English trend.

@@ -5,6 +5,7 @@ import type { Account } from "../config.ts";
 import { collapseDuplicates, computeStats, scoreAll, sortTweets } from "../score.ts";
 import { clamp } from "../util.ts";
 import { type Progress, paginate, type ToolDeps, type ToolOutput, withAccount } from "./context.ts";
+import { parseTweetId } from "./tweet.ts";
 
 export function parseUsername(input: string): string {
 	const s = (input ?? "").trim().replace(/^@/, "");
@@ -49,12 +50,12 @@ export async function runUser(
 	return { text: body.text, details: { account: account.name, user: value.user, stats: { ...stats, top: stats.top.map((t) => t.id), earliest_notable: stats.earliest_notable?.id ?? null }, posts } };
 }
 
-/** Paginate a Followers or Following GraphQL timeline. */
+/** Paginate a Followers, Following, Retweeters or Favoriters GraphQL timeline. */
 async function paginateUsers(
 	deps: ToolDeps,
 	a: Account,
-	op: "Followers" | "Following",
-	userId: string,
+	op: "Followers" | "Following" | "Retweeters" | "Favoriters",
+	idValue: string,
 	limit: number,
 	opts: { signal?: AbortSignal; progress?: Progress; label: string },
 ): Promise<XUser[]> {
@@ -62,9 +63,10 @@ async function paginateUsers(
 	const seen = new Set<string>();
 	let cursor: string | null = null;
 	let empty = 0;
+	const idKey = op === "Retweeters" || op === "Favoriters" ? "tweetId" : "userId";
 	for (let page = 1; out.length < limit; page++) {
 		if (opts.signal?.aborted) throw new XError("aborted", "Cancelled");
-		const vars: Record<string, unknown> = { userId, count: 20, includePromotedContent: false };
+		const vars: Record<string, unknown> = { [idKey]: idValue, count: 20, includePromotedContent: false };
 		if (cursor) vars.cursor = cursor;
 		const data = await deps.engine.graphql(a, op, vars, { signal: opts.signal });
 		const res = parseUserList(data);
@@ -128,4 +130,44 @@ export async function runFollowing(
 		lines.push(`  @${u.handle}${u.verified ? " ✓" : ""} — ${u.name} · ${compact(u.followers)} followers`);
 	}
 	return { text: lines.join("\n"), details: { account: account.name, user: value.user.handle, following: value.users } };
+}
+
+export async function runRetweeters(
+	deps: ToolDeps,
+	p: { id_or_url: string; limit?: number; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+): Promise<ToolOutput> {
+	const id = parseTweetId(p.id_or_url);
+	const limit = clamp(p.limit ?? 20, 1, 200);
+	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+		const users = await paginateUsers(deps, a, "Retweeters", id, limit, { signal, progress, label: `retweeters of ${id}` });
+		return { users };
+	});
+	const lines = [`Retweeters of post ${id} (${value.users.length})`, ""];
+	for (const u of value.users) {
+		lines.push(`  @${u.handle}${u.verified ? " ✓" : ""} — ${u.name} · ${compact(u.followers)} followers`);
+	}
+	if (!value.users.length) lines.push("  (no retweeters found)");
+	return { text: lines.join("\n"), details: { account: account.name, post: id, retweeters: value.users } };
+}
+
+export async function runLikers(
+	deps: ToolDeps,
+	p: { id_or_url: string; limit?: number; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+): Promise<ToolOutput> {
+	const id = parseTweetId(p.id_or_url);
+	const limit = clamp(p.limit ?? 20, 1, 200);
+	const { value, account } = await withAccount(deps, p.account, signal, async (a) => {
+		const users = await paginateUsers(deps, a, "Favoriters", id, limit, { signal, progress, label: `likers of ${id}` });
+		return { users };
+	});
+	const lines = [`Likers of post ${id} (${value.users.length})`, ""];
+	for (const u of value.users) {
+		lines.push(`  @${u.handle}${u.verified ? " ✓" : ""} — ${u.name} · ${compact(u.followers)} followers`);
+	}
+	if (!value.users.length) lines.push("  (no likers found)");
+	return { text: lines.join("\n"), details: { account: account.name, post: id, likers: value.users } };
 }

@@ -23,7 +23,7 @@ test("internalErrorFallback: output is JSON-safe (no functions/undefined leaking
 	assert.doesNotThrow(() => JSON.stringify(r));
 });
 
-test("piX registers the 11 tools, the x command, and session lifecycle handlers", () => {
+test("piX registers the 19 tools, the x command, and session lifecycle handlers", () => {
 	const registeredTools: string[] = [];
 	const registeredCommands: string[] = [];
 	const registeredEvents: string[] = [];
@@ -46,7 +46,7 @@ test("piX registers the 11 tools, the x command, and session lifecycle handlers"
 
 	piX(fakePi);
 
-	assert.deepEqual(registeredTools.sort(), ["x_dm", "x_dm_inbox", "x_dm_thread", "x_doctor", "x_followers", "x_following", "x_post", "x_search", "x_trending", "x_tweet", "x_user"]);
+	assert.deepEqual(registeredTools.sort(), ["x_bookmark", "x_bookmarks", "x_dm", "x_dm_inbox", "x_dm_thread", "x_doctor", "x_followers", "x_following", "x_home", "x_like", "x_likers", "x_post", "x_retweet", "x_retweeters", "x_search", "x_trending", "x_tweet", "x_user"]);
 	assert.deepEqual(registeredCommands, ["x"]);
 	assert.ok(registeredEvents.includes("session_start"));
 	assert.ok(registeredEvents.includes("session_shutdown"));

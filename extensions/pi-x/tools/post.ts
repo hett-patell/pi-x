@@ -82,3 +82,87 @@ export async function runPost(
 		details: { account: a.name, sent: true, id: newId, url, reply_to: replyTo, quote: quoteUrl },
 	};
 }
+
+/**
+ * Like a tweet. Same safety rules: write-gated, single account, once, confirmed.
+ */
+export async function runLike(
+	deps: ToolDeps,
+	p: { id_or_url: string; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+	confirm?: ConfirmSend,
+): Promise<ToolOutput> {
+	requireWriteAccess(deps);
+	const cfg = readConfig(deps);
+	const id = parseTweetId(p.id_or_url);
+	const a = orderAccounts(cfg, p.account)[0];
+	const from = `@${a.handle ?? a.name}`;
+
+	if (confirm && !cfg.writeNoConfirm) {
+		const ok = await confirm(`Like post ${id} from ${from}?`, `https://x.com/i/status/${id}`);
+		if (!ok) return { text: `✗ Not liked — you declined.`, details: { account: a.name, liked: false } };
+	}
+
+	progress?.("liking…");
+	await deps.locks.run(a.name, () =>
+		deps.engine.graphql(a, "FavoriteTweet", { tweet_id: id }, { signal, method: "POST", once: true }),
+	);
+	return { text: `✓ Liked post ${id} from ${from}.`, details: { account: a.name, liked: true, id } };
+}
+
+/**
+ * Retweet a tweet. Same safety rules.
+ */
+export async function runRetweet(
+	deps: ToolDeps,
+	p: { id_or_url: string; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+	confirm?: ConfirmSend,
+): Promise<ToolOutput> {
+	requireWriteAccess(deps);
+	const cfg = readConfig(deps);
+	const id = parseTweetId(p.id_or_url);
+	const a = orderAccounts(cfg, p.account)[0];
+	const from = `@${a.handle ?? a.name}`;
+
+	if (confirm && !cfg.writeNoConfirm) {
+		const ok = await confirm(`Retweet post ${id} from ${from}?`, `https://x.com/i/status/${id}`);
+		if (!ok) return { text: `✗ Not retweeted — you declined.`, details: { account: a.name, retweeted: false } };
+	}
+
+	progress?.("retweeting…");
+	await deps.locks.run(a.name, () =>
+		deps.engine.graphql(a, "CreateRetweet", { tweet_id: id }, { signal, method: "POST", once: true }),
+	);
+	return { text: `✓ Retweeted post ${id} from ${from}.`, details: { account: a.name, retweeted: true, id } };
+}
+
+/**
+ * Bookmark a tweet. Same safety rules.
+ */
+export async function runBookmarkAdd(
+	deps: ToolDeps,
+	p: { id_or_url: string; account?: string },
+	signal?: AbortSignal,
+	progress?: Progress,
+	confirm?: ConfirmSend,
+): Promise<ToolOutput> {
+	requireWriteAccess(deps);
+	const cfg = readConfig(deps);
+	const id = parseTweetId(p.id_or_url);
+	const a = orderAccounts(cfg, p.account)[0];
+	const from = `@${a.handle ?? a.name}`;
+
+	if (confirm && !cfg.writeNoConfirm) {
+		const ok = await confirm(`Bookmark post ${id} from ${from}?`, `https://x.com/i/status/${id}`);
+		if (!ok) return { text: `✗ Not bookmarked — you declined.`, details: { account: a.name, bookmarked: false } };
+	}
+
+	progress?.("bookmarking…");
+	await deps.locks.run(a.name, () =>
+		deps.engine.graphql(a, "CreateBookmark", { tweet_id: id }, { signal, method: "POST", once: true }),
+	);
+	return { text: `✓ Bookmarked post ${id} from ${from}.`, details: { account: a.name, bookmarked: true, id } };
+}

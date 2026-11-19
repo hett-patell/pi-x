@@ -112,6 +112,13 @@ What's trending on X right now, and why?
 | `x_followers` | `username`, `limit?` | List followers of an X account (handle, name, verified, follower count). Paginates up to 200. |
 | `x_following` | `username`, `limit?` | List who an X account follows. Same format as `x_followers`. |
 | `x_post` | `text`, `reply_to?`, `quote?`, `account?` | Post a tweet, reply, or quote-tweet. Needs `/x write on`; you confirm every post. Sent once, from one account — never rotated or retried. |
+| `x_like` | `id_or_url`, `account?` | Like a post. Needs `/x write on`; you confirm. Sent once, one account. |
+| `x_retweet` | `id_or_url`, `account?` | Retweet a post. Same safety rules. |
+| `x_bookmark` | `id_or_url`, `account?` | Bookmark a post. Same safety rules. |
+| `x_bookmarks` | `limit?`, `sort?`, `account?` | List your bookmarked posts with engagement stats. Needs `/x write on` (read-only). |
+| `x_retweeters` | `id_or_url`, `limit?`, `account?` | List who retweeted a post (handle, name, verified, follower count). |
+| `x_likers` | `id_or_url`, `limit?`, `account?` | List who liked a post. Same format. |
+| `x_home` | `limit?`, `sort?`, `account?` | Read your home/following feed with engagement stats. |
 
 ## Commands
 
@@ -239,7 +246,7 @@ Project layout:
 
 ```
 extensions/pi-x/
-  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_dm, x_dm_inbox, x_dm_thread, x_followers, x_following, x_post, x_doctor), /x wiring
+  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_dm, x_dm_inbox, x_dm_thread, x_followers, x_following, x_post, x_like, x_retweet, x_bookmark, x_bookmarks, x_retweeters, x_likers, x_home, x_doctor), /x wiring
   commands.ts      /x command handling, SUBCOMMANDS, status footer, login watcher
   deps.ts          builds the shared ToolDeps (lazy agent-browser runner, sessions, engine, locks)
   config.ts        config load/save, 0.x migration, account validation, managed-profile check
