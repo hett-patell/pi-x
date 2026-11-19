@@ -37,6 +37,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "doctor", usage: "/x doctor", help: "Full health check with fixes" },
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
+	{ name: "dm", usage: "/x dm [user]", help: "Interactive DM chat overlay (inbox or thread)" },
 	{ name: "close", usage: "/x close", help: "Close all pi-x browser windows" },
 	{ name: "help", usage: "/x help", help: "Show all commands" },
 ];
@@ -194,6 +195,10 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 	try {
 		if (cmd.legacyFrom) ui.say(`(“/x ${cmd.legacyFrom}” is now “/x ${[cmd.name, ...cmd.args].join(" ")}”)`);
 		switch (cmd.name) {
+			case "dm":
+				// Handled in index.ts via ctx.ui.custom overlay — this fallback is for headless mode
+				ui.say("/x dm requires the Pi TUI (interactive mode). Use x_dm_inbox / x_dm_thread / x_dm tools instead.", "warning");
+				break;
 			case "status": {
 				const running = deps.binary ? await deps.sessions.list().catch(() => [] as string[]) : [];
 				ui.say(statusText(deps, running));

@@ -136,6 +136,7 @@ What's trending on X right now, and why?
 | `/x import-chrome <account>` | Reuse your desktop Chrome login for an account |
 | `/x location [place\|default]` | Default region for `x_trending` |
 | `/x write on\|off [--no-confirm]` | Allow DM access: read inbox + send (off by default). `--no-confirm` skips the per-message prompt, e.g. for headless use |
+| `/x dm [user]` | Interactive DM chat overlay — browse conversations, read threads, type and send messages in a TUI panel. Opens inbox by default; with a user, jumps straight to that thread |
 | `/x doctor` | Full health check with fixes |
 | `/x backup [account]` | Save the account's login state to a file (0600) |
 | `/x restore [account]` | Restore a saved login state |
@@ -246,7 +247,7 @@ Project layout:
 
 ```
 extensions/pi-x/
-  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_dm, x_dm_inbox, x_dm_thread, x_followers, x_following, x_post, x_like, x_retweet, x_bookmark, x_bookmarks, x_retweeters, x_likers, x_home, x_doctor), /x wiring
+  index.ts         tool registration (x_trending, x_search, x_tweet, x_user, x_dm, x_dm_inbox, x_dm_thread, x_followers, x_following, x_post, x_like, x_retweet, x_bookmark, x_bookmarks, x_retweeters, x_likers, x_home, x_doctor), /x wiring, /x dm TUI overlay
   commands.ts      /x command handling, SUBCOMMANDS, status footer, login watcher
   deps.ts          builds the shared ToolDeps (lazy agent-browser runner, sessions, engine, locks)
   config.ts        config load/save, 0.x migration, account validation, managed-profile check
@@ -260,8 +261,9 @@ extensions/pi-x/
   format.ts        compact text rendering + OUTPUT_BUDGET fitting
   errors.ts        XErrorCode, FIXES, XError
   util.ts          clamp, unique, abortable sleep
+  tui/dm-chat.ts   interactive DM chat overlay (Focusable component for ctx.ui.custom)
   tools/           context.ts (shared deps, account rotation, pagination) + one module per tool
-                   (trending, search, tweet, user, doctor)
+                   (trending, search, tweet, user, doctor, dm, post, bookmarks, home)
 skills/pi-x/       SKILL.md — how an agent should route requests and write insights
 test/              unit tests + recorded fixtures
 scripts/smoke.ts   live smoke script (npm run smoke)

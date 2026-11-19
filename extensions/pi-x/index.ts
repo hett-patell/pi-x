@@ -6,12 +6,13 @@
 import { StringEnum, Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionToolContext } from "@earendil-works/pi-coding-agent";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, getAgentDir, truncateHead } from "@earendil-works/pi-coding-agent";
-import { scrubSecrets } from "./accounts.ts";
-import { type CommandUI, completeArgs, footerText, runCommand } from "./commands.ts";
+import { orderAccounts, scrubSecrets } from "./accounts.ts";
+import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } from "./commands.ts";
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
-import { FIXES } from "./errors.ts";
-import { errorOutput, type Progress, readConfig, type ToolOutput } from "./tools/context.ts";
+import { FIXES, XError } from "./errors.ts";
+import { parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
+import { errorOutput, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runPost, runLike, runRetweet, runBookmarkAdd } from "./tools/post.ts";
@@ -21,6 +22,8 @@ import { runSearch } from "./tools/search.ts";
 import { runTrending } from "./tools/trending.ts";
 import { runTweet } from "./tools/tweet.ts";
 import { runFollowers, runFollowing, runRetweeters, runLikers, runUser } from "./tools/user.ts";
+import { parseUsername } from "./tools/user.ts";
+import { DmChatComponent, type DmChatActions } from "./tui/dm-chat.ts";
 
 const Account = Type.Optional(Type.String({ description: "Pin a specific pi-x account (see /x status). Omit to auto-pick/rotate." }));
 
@@ -405,9 +408,73 @@ export default function piX(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("x", {
-		description: "pi-x: /x status · login · add · use · proxy · location · doctor · help",
+		description: "pi-x: /x status · login · dm · add · use · proxy · location · doctor · help",
 		getArgumentCompletions: (prefix) => completeArgs(prefix, readConfig(deps).accounts.map((a) => a.name)),
 		handler: async (args, ctx) => {
+			// Intercept /x dm for TUI overlay
+			const cmd = parseCommand(args);
+			if (cmd.name === "dm") {
+				if (!ctx.hasUI || ctx.mode !== "tui") {
+					if (ctx.hasUI) ctx.ui.notify("/x dm requires interactive mode", "error");
+					else process.stderr.write("/x dm requires interactive mode\n");
+					return;
+				}
+				const cfg = readConfig(deps);
+				if (!cfg.write) {
+					ctx.ui.notify("DM access is off. Run /x write on to enable it.", "error");
+					return;
+				}
+				const initialUser = cmd.args[0] ? parseUsername(cmd.args[0]) : undefined;
+				const actions: DmChatActions = {
+					loadInbox: async () => {
+						const { value, account } = await withAccount(deps, undefined, undefined, async (a) => {
+							const viewer = await deps.engine.viewer(a, {});
+							const data = await deps.engine.dmInbox(a, {});
+							return { conversations: parseDmInbox(data, viewer?.id ?? ""), selfId: viewer?.id ?? "", accountLabel: a.handle ?? a.name };
+						});
+						return value;
+					},
+					loadThread: async (handle: string) => {
+						const { value } = await withAccount(deps, undefined, undefined, async (a) => {
+							const viewer = await deps.engine.viewer(a, {});
+							const selfId = viewer?.id ?? "";
+							const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, {}));
+							if (!user) throw new XError("not_found", `@${handle} not found`);
+							const inboxData = await deps.engine.dmInbox(a, {});
+							const convs = parseDmInbox(inboxData, selfId);
+							let convId: string | null = null;
+							for (const c of convs) {
+								if (c.handle.toLowerCase() === handle.toLowerCase()) { convId = c.id; break; }
+							}
+							if (!convId) {
+								const ids = [selfId, user.id].sort((x, y) => Number(BigInt(x) - BigInt(y)) || x.localeCompare(y));
+								convId = `${ids[0]}-${ids[1]}`;
+							}
+							const data = await deps.engine.dmConversation(a, convId, {});
+							const { messages } = parseDmThread(data);
+							return { messages, selfId, otherHandle: user.handle };
+						});
+						return value;
+					},
+					sendMessage: async (handle: string, text: string) => {
+						try {
+							const a = orderAccounts(readConfig(deps))[0];
+							const user = parseUser(await deps.engine.graphql(a, "UserByScreenName", { screen_name: handle }, {}));
+							if (!user) return { ok: false, error: `@${handle} not found` };
+							await deps.engine.dm(a, user.id, text, {});
+							return { ok: true };
+						} catch (e) {
+							return { ok: false, error: e instanceof Error ? e.message : String(e) };
+						}
+					},
+				};
+				await ctx.ui.custom<undefined>(
+					(tui, theme, _kb, done) => new DmChatComponent(tui, theme, done, actions, initialUser),
+					{ overlay: true },
+				);
+				return;
+			}
+
 			const ui: CommandUI = {
 				hasUI: ctx.hasUI,
 				say: (text, level = "info") => {
