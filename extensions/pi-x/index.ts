@@ -425,23 +425,41 @@ export default function piX(pi: ExtensionAPI) {
 					return;
 				}
 
-				// Pick account: if multiple connected accounts, let the user choose
+				// Pick account: check if first arg matches an account name, otherwise prompt
 				const connected = cfg.accounts.filter((a) => a.enabled && a.handle);
 				let pinnedAccountName: string | undefined;
-				if (connected.length > 1) {
-					const choice = await ctx.ui.select(
-						"Open DMs for which account?",
-						connected.map((a) => `@${a.handle} (${a.name})`),
-					);
-					if (!choice) return; // user cancelled
-					const match = choice.match(/\(([^)]+)\)$/);
-					pinnedAccountName = match ? match[1] : connected[0].name;
-				} else if (connected.length === 1) {
-					pinnedAccountName = connected[0].name;
+				let initialUser: string | undefined;
+
+				// Parse args: /x dm [account] [user]
+				// If first arg matches an account name, use it; remaining arg is the user
+				const firstArg = cmd.args[0];
+				const secondArg = cmd.args[1];
+				if (firstArg) {
+					const matchedAccount = connected.find((a) => a.name.toLowerCase() === firstArg.toLowerCase());
+					if (matchedAccount) {
+						pinnedAccountName = matchedAccount.name;
+						initialUser = secondArg ? parseUsername(secondArg) : undefined;
+					} else {
+						// First arg is a user handle, not an account
+						initialUser = parseUsername(firstArg);
+					}
+				}
+
+				// If no account pinned yet, prompt when multiple connected
+				if (!pinnedAccountName) {
+					if (connected.length > 1) {
+						const choice = await ctx.ui.select(
+							"Open DMs for which account?",
+							connected.map((a) => `@${a.handle} (${a.name})`),
+						);
+						if (!choice) return; // user cancelled
+						const match = choice.match(/\(([^)]+)\)$/);
+						pinnedAccountName = match ? match[1] : connected[0].name;
+					} else if (connected.length === 1) {
+						pinnedAccountName = connected[0].name;
+					}
 				}
 				// pinnedAccountName is undefined only if no accounts are connected — withAccount will error
-
-				const initialUser = cmd.args[0] ? parseUsername(cmd.args[0]) : undefined;
 				const actions: DmChatActions = {
 					loadInbox: async () => {
 						const { value } = await withAccount(deps, pinnedAccountName, undefined, async (a) => {
