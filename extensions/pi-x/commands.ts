@@ -38,6 +38,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
 	{ name: "dm", usage: "/x dm [account] [user]", help: "Interactive DM chat overlay — picks account when multiple are logged in", takesAccount: true },
+	{ name: "feed", usage: "/x feed [account]", help: "X feed sidebar — live home feed panel alongside your editor", takesAccount: true },
 	{ name: "close", usage: "/x close", help: "Close all pi-x browser windows" },
 	{ name: "help", usage: "/x help", help: "Show all commands" },
 ];
@@ -198,6 +199,10 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 			case "dm":
 				// Handled in index.ts via ctx.ui.custom overlay — this fallback is for headless mode
 				ui.say("/x dm requires the Pi TUI (interactive mode). Use x_dm_inbox / x_dm_thread / x_dm tools instead.", "warning");
+				break;
+			case "feed":
+				// Handled in index.ts via ctx.ui.custom overlay — this fallback is for headless mode
+				ui.say("/x feed requires the Pi TUI (interactive mode). Use x_home tool instead.", "warning");
 				break;
 			case "status": {
 				const running = deps.binary ? await deps.sessions.list().catch(() => [] as string[]) : [];

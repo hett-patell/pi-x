@@ -11,8 +11,8 @@ import { type CommandUI, completeArgs, footerText, parseCommand, runCommand } fr
 import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
 import { FIXES, toXError, XError } from "./errors.ts";
-import { compareIds, type DmMessage, parseDmInbox, parseDmThread, parseUser } from "./normalize.ts";
-import { errorOutput, personalAccount, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
+import { compareIds, type DmMessage, parseDmInbox, parseDmThread, parseTimeline, parseUser, type Tweet } from "./normalize.ts";
+import { errorOutput, personalAccount, paginate, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runPost, runLike, runRetweet, runBookmarkAdd } from "./tools/post.ts";
@@ -24,6 +24,7 @@ import { runTweet } from "./tools/tweet.ts";
 import { runFollowers, runFollowing, runRetweeters, runLikers, runUser } from "./tools/user.ts";
 import { parseUsername } from "./tools/user.ts";
 import { DmChatComponent, type DmChatActions } from "./tui/dm-chat.ts";
+import { FeedSidebarComponent, type FeedActions } from "./tui/feed-sidebar.ts";
 
 const Account = Type.Optional(Type.String({ description: "Pin a specific pi-x account (see /x status). Omit to auto-pick/rotate." }));
 
@@ -517,6 +518,75 @@ export default function piX(pi: ExtensionAPI) {
 				await ctx.ui.custom<undefined>(
 					(tui, theme, _kb, done) => new DmChatComponent(tui, theme, done, actions, initialUser),
 					{ overlay: true },
+				);
+				return;
+			}
+
+			// Intercept /x feed for TUI sidebar overlay
+			if (cmd.name === "feed") {
+				if (!ctx.hasUI || ctx.mode !== "tui") {
+					if (ctx.hasUI) ctx.ui.notify("/x feed requires interactive mode", "error");
+					else process.stderr.write("/x feed requires interactive mode\n");
+					return;
+				}
+
+				// Pick account
+				let pinnedFeedAccount: string | undefined;
+				const feedArg = cmd.args[0];
+				try {
+					const cfg = readConfig(deps);
+					if (feedArg) {
+						const own = cfg.accounts.find((a) => {
+							const s = feedArg.trim().replace(/^@/, "").toLowerCase();
+							return a.name.toLowerCase() === s || a.handle?.toLowerCase() === s;
+						});
+						if (own) pinnedFeedAccount = own.name;
+					}
+					const pick = async (title: string, options: string[]) => ctx.ui.select(title, options);
+					const pinned = await personalAccount(deps, pinnedFeedAccount, pick);
+					pinnedFeedAccount = pinned.name;
+				} catch (e) {
+					const x = toXError(e);
+					if (x.code === "aborted") return;
+					ctx.ui.notify(`${x.message}${x.fix ? ` — ${x.fix}` : ""}`, "error");
+					return;
+				}
+
+				const feedActions: FeedActions = {
+					loadFeed: async () => {
+						const { value, account } = await withAccount(deps, pinnedFeedAccount, undefined, async (a) => {
+							const r = await paginate(
+								async (cursor) =>
+									parseTimeline(
+										await deps.engine.graphql(
+											a,
+											"HomeLatestTimeline",
+											{ count: 20, includePromotedContent: false, latestControlAvailable: true, ...(cursor ? { cursor } : {}) },
+											{},
+										),
+									),
+								40, // fetch up to 40 tweets for the sidebar
+								{ sleep: deps.sleep, random: deps.random, label: "feed" },
+							);
+							return r.tweets;
+						});
+						return { tweets: value, accountLabel: account.handle ?? account.name };
+					},
+				};
+
+				await ctx.ui.custom<undefined>(
+					(tui, theme, _kb, done) => new FeedSidebarComponent(tui, theme, done, feedActions),
+					{
+						overlay: true,
+						overlayOptions: {
+							anchor: "right-center",
+							width: "30%",
+							minWidth: 40,
+							maxHeight: "90%",
+							margin: { right: 1, top: 1, bottom: 1 },
+							visible: (termWidth) => termWidth >= 100,
+						},
+					},
 				);
 				return;
 			}
