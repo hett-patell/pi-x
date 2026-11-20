@@ -216,4 +216,24 @@ describe("FeedSidebarComponent", () => {
 		assert.ok(lines.some((l) => l.includes("two_poster")), "feed reloaded for new account");
 		component.dispose();
 	});
+
+	it("with onBlur: Tab/Esc hand input back without closing, q closes", async () => {
+		const tui = { requestRender: () => {} };
+		let closed = 0;
+		let blurred = 0;
+		const component = new FeedSidebarComponent(tui, mockTheme(), () => { closed++; }, {
+			loadFeed: async () => ({ tweets: [makeTweet("1", "a", "hi")], accountLabel: "me" }),
+		}, { refreshIntervalMs: 0 });
+		component.onBlur = () => { blurred++; };
+		await new Promise((r) => setTimeout(r, 20));
+		assert.ok(component.render(60).some((l) => l.includes("alt+x focus")), "unfocused hint");
+		component.focused = true;
+		assert.ok(component.render(60).some((l) => l.includes("focused")), "focused marker");
+		component.handleInput("\t");
+		component.handleInput("\x1b");
+		assert.equal(blurred, 2);
+		assert.equal(closed, 0);
+		component.handleInput("q");
+		assert.equal(closed, 1);
+	});
 });

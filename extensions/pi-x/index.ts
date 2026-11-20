@@ -25,6 +25,16 @@ import { runFollowers, runFollowing, runRetweeters, runLikers, runUser } from ".
 import { parseUsername } from "./tools/user.ts";
 import { DmChatComponent, type DmChatActions } from "./tui/dm-chat.ts";
 import { FeedSidebarComponent, type FeedActions } from "./tui/feed-sidebar.ts";
+import type { OverlayHandle } from "@earendil-works/pi-tui";
+
+/** The open /x feed sidebar (one per process). Non-capturing: the editor keeps the keyboard. */
+let openFeed: { component: FeedSidebarComponent; handle?: OverlayHandle } | undefined;
+
+function focusFeed(): boolean {
+	if (!openFeed?.handle) return false;
+	openFeed.handle.focus();
+	return true;
+}
 
 const Account = Type.Optional(Type.String({ description: "Pin a specific pi-x account (see /x status). Omit to auto-pick/rotate." }));
 
@@ -408,6 +418,13 @@ export default function piX(pi: ExtensionAPI) {
 		execute: tool((_p, s, prog) => runDoctor(deps, s, prog)),
 	});
 
+	pi.registerShortcut("alt+x", {
+		description: "pi-x: focus the /x feed sidebar",
+		handler: async (ctx) => {
+			if (!focusFeed()) ctx.ui.notify("No X feed open — run /x feed", "info");
+		},
+	});
+
 	pi.registerCommand("x", {
 		description: "pi-x: /x status · login · dm · add · use · proxy · location · doctor · help",
 		getArgumentCompletions: (prefix) => completeArgs(prefix, readConfig(deps).accounts.map((a) => a.name)),
@@ -538,6 +555,13 @@ export default function piX(pi: ExtensionAPI) {
 					else process.stderr.write("/x feed requires interactive mode\n");
 					return;
 				}
+				// Already open: /x feed focuses it, /x feed close closes it.
+				if (openFeed) {
+					if (cmd.args[0]?.toLowerCase() === "close") openFeed.component.close();
+					else focusFeed();
+					return;
+				}
+				if (cmd.args[0]?.toLowerCase() === "close") return;
 
 				// Pick account
 				let pinnedFeedAccount: string | undefined;
@@ -598,20 +622,40 @@ export default function piX(pi: ExtensionAPI) {
 					},
 				};
 
-				await ctx.ui.custom<undefined>(
-					(tui, theme, _kb, done) => new FeedSidebarComponent(tui, theme, done, feedActions),
-					{
-						overlay: true,
-						overlayOptions: {
-							anchor: "right-center",
-							width: "30%",
-							minWidth: 40,
-							maxHeight: "90%",
-							margin: { right: 1, top: 1, bottom: 1 },
-							visible: (termWidth) => termWidth >= 100,
+				// Not awaited: the command returns at once so you keep chatting while the feed stays open.
+				const feed: { component?: FeedSidebarComponent; handle?: OverlayHandle } = {};
+				void ctx.ui
+					.custom<undefined>(
+						(tui, theme, _kb, done) => {
+							const c = new FeedSidebarComponent(tui, theme, done, feedActions);
+							c.onBlur = () => feed.handle?.unfocus();
+							feed.component = c;
+							openFeed = { component: c };
+							return c;
 						},
-					},
-				);
+						{
+							overlay: true,
+							overlayOptions: {
+								anchor: "right-center",
+								width: "30%",
+								minWidth: 40,
+								maxHeight: "90%",
+								margin: { right: 1, top: 1, bottom: 1 },
+								visible: (termWidth) => termWidth >= 100,
+								nonCapturing: true,
+							},
+							onHandle: (h) => {
+								feed.handle = h;
+								const cur = openFeed;
+								if (cur && cur.component === feed.component) cur.handle = h;
+							},
+						},
+					)
+					.catch((e) => ctx.ui.notify(`/x feed: ${toXError(e).message}`, "error"))
+					.finally(() => {
+						if (openFeed?.component === feed.component) openFeed = undefined;
+					});
+				ctx.ui.notify("𝕏 feed open — keep typing here · alt+x to focus the feed · Tab/Esc back · q close", "info");
 				return;
 			}
 

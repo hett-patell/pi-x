@@ -27,6 +27,7 @@ test("piX registers the 19 tools, the x command, and session lifecycle handlers"
 	const registeredTools: string[] = [];
 	const registeredCommands: string[] = [];
 	const registeredEvents: string[] = [];
+	const registeredShortcuts: string[] = [];
 	// Minimal fake ExtensionAPI: piX() only calls registerTool/registerCommand/on during
 	// registration (none of the registered closures run here), so this never touches the
 	// filesystem or performs any I/O. Cast via unknown since this stub only covers the
@@ -38,6 +39,9 @@ test("piX registers the 19 tools, the x command, and session lifecycle handlers"
 		registerCommand: (name: string) => {
 			registeredCommands.push(name);
 		},
+		registerShortcut: (key: string) => {
+			registeredShortcuts.push(key);
+		},
 		on: (event: string) => {
 			registeredEvents.push(event);
 			return () => {};
@@ -48,6 +52,7 @@ test("piX registers the 19 tools, the x command, and session lifecycle handlers"
 
 	assert.deepEqual(registeredTools.sort(), ["x_bookmark", "x_bookmarks", "x_dm", "x_dm_inbox", "x_dm_thread", "x_doctor", "x_followers", "x_following", "x_home", "x_like", "x_likers", "x_post", "x_retweet", "x_retweeters", "x_search", "x_trending", "x_tweet", "x_user"]);
 	assert.deepEqual(registeredCommands, ["x"]);
+	assert.deepEqual(registeredShortcuts, ["alt+x"]);
 	assert.ok(registeredEvents.includes("session_start"));
 	assert.ok(registeredEvents.includes("session_shutdown"));
 });

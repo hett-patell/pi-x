@@ -4,12 +4,14 @@
  * /x feed          → toggle sidebar on/off
  * /x feed refresh  → force refresh now
  *
+ * The panel is non-capturing: the editor keeps the keyboard while the feed is open.
+ * Alt+X (or /x feed again) focuses the feed; Tab/Esc hands input back to the editor.
+ *
  * Controls (when focused):
  *   ↑↓    scroll through tweets
- *   Enter open tweet URL (copy to clipboard)
- *   r     refresh feed
- *   Esc   close sidebar
- *   Tab   cycle focus back to editor
+ *   m     toggle media · a switch account · r refresh
+ *   Tab/Esc  back to editor (feed stays open)
+ *   q     close sidebar
  */
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
@@ -99,7 +101,17 @@ function compact(n: number): string {
 // ─── Component ───────────────────────────────────────────────────────
 
 export class FeedSidebarComponent {
-	focused = false;
+	private _focused = false;
+	get focused(): boolean {
+		return this._focused;
+	}
+	set focused(v: boolean) {
+		if (v === this._focused) return;
+		this._focused = v;
+		this.invalidate();
+	}
+	/** Called when the user wants the editor back (Tab/Esc) while the feed stays open. */
+	onBlur?: () => void;
 
 	private theme: Theme;
 	private tui: FeedTUI;
@@ -185,6 +197,12 @@ export class FeedSidebarComponent {
 		this.refreshTimer = setInterval(() => void this.refresh(), this.refreshIntervalMs);
 	}
 
+	/** Close the sidebar for good. */
+	close(): void {
+		this.dispose();
+		this.done(undefined);
+	}
+
 	dispose(): void {
 		this.disposed = true;
 		if (this.refreshTimer) {
@@ -196,9 +214,12 @@ export class FeedSidebarComponent {
 	// ─── Input handling ──────────────────────────────────────────────
 
 	handleInput(data: string): void {
-		if (matchesKey(data, "escape") || data === "q") {
-			this.dispose();
-			this.done(undefined);
+		if (data === "q" || data === "Q" || (!this.onBlur && matchesKey(data, "escape"))) {
+			this.close();
+			return;
+		}
+		if (this.onBlur && (matchesKey(data, "escape") || matchesKey(data, "tab"))) {
+			this.onBlur();
 			return;
 		}
 
@@ -255,17 +276,18 @@ export class FeedSidebarComponent {
 		const th = this.theme;
 		const innerW = Math.max(1, width - 2);
 		const pad = (s: string) => truncateToWidth(s, innerW, "…", true);
-		const border = (c: string) => th.fg("border", c);
+		const border = (c: string) => th.fg(this.onBlur && this.focused ? "borderAccent" : "border", c);
 		const lines: string[] = [];
 
 		// ── Header ──
 		const refreshInfo = this.lastRefresh
 			? th.fg("dim", ` · ${relTime(this.lastRefresh.toISOString())} ago`)
 			: "";
+		const focusHint = this.onBlur ? (this.focused ? th.fg("accent", " ● focused") : th.fg("dim", " · alt+x focus")) : "";
 		lines.push(border(`╭${"─".repeat(innerW)}╮`));
 		lines.push(
 			border("│") +
-				pad(` ${th.fg("accent", "𝕏 Feed")} ${th.fg("dim", `@${this.accountLabel}`)}${refreshInfo} `) +
+				pad(` ${th.fg("accent", "𝕏 Feed")} ${th.fg("dim", `@${this.accountLabel}`)}${refreshInfo}${focusHint} `) +
 				border("│"),
 		);
 		lines.push(border(`├${"─".repeat(innerW)}┤`));
@@ -347,7 +369,7 @@ export class FeedSidebarComponent {
 		lines.push(
 			border("│") +
 				pad(
-					th.fg("dim", ` ${this.selectedIndex + 1}/${this.tweets.length} · ↑↓ · m media ·${this.actions.switchAccount ? " a acct ·" : ""} r · Esc`),
+					th.fg("dim", ` ${this.selectedIndex + 1}/${this.tweets.length} · ↑↓ · m media ·${this.actions.switchAccount ? " a acct ·" : ""} r · ${this.onBlur ? "Tab editor · q close" : "Esc"}`),
 				) +
 				border("│"),
 		);

@@ -38,7 +38,7 @@ export const SUBCOMMANDS: Sub[] = [
 	{ name: "backup", usage: "/x backup [account]", help: "Save the account's login state to a file (0600)", takesAccount: true },
 	{ name: "restore", usage: "/x restore [account]", help: "Restore a saved login state", takesAccount: true },
 	{ name: "dm", usage: "/x dm [account] [user]", help: "Interactive DM chat overlay — picks account when multiple are logged in", takesAccount: true },
-	{ name: "feed", usage: "/x feed [account]", help: "X feed sidebar — live home feed panel alongside your editor", takesAccount: true },
+	{ name: "feed", usage: "/x feed [account|close]", help: "X feed sidebar beside the editor — keep typing; alt+x focuses it, Tab/Esc returns, q closes", takesAccount: true },
 	{ name: "close", usage: "/x close", help: "Close all pi-x browser windows" },
 	{ name: "help", usage: "/x help", help: "Show all commands" },
 ];
