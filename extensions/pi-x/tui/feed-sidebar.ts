@@ -48,7 +48,7 @@ export interface FeedSidebarOptions {
 	loadImage?: (url: string) => Promise<string | null>;
 	/** Terminal height in rows (defaults to process.stdout.rows). */
 	rows?: () => number;
-	/** Max image height in terminal rows (default 10). */
+	/** Max image height in terminal rows (default 8). */
 	imageRows?: number;
 	/** Total panel height in rows (default: terminal rows minus the 1-row top/bottom margins). */
 	height?: () => number;
@@ -160,7 +160,7 @@ export class FeedSidebarComponent {
 		this.refreshIntervalMs = options?.refreshIntervalMs ?? 5 * 60_000;
 		this.loadImage = options?.loadImage ?? defaultLoadImage;
 		this.rows = options?.rows ?? (() => process.stdout.rows || 40);
-		this.imageRows = options?.imageRows ?? 10;
+		this.imageRows = options?.imageRows ?? 8;
 		this.height = options?.height ?? (() => this.rows() - 2);
 		void this.refresh();
 		this.startAutoRefresh();
