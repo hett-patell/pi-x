@@ -48,8 +48,10 @@ export interface FeedSidebarOptions {
 	loadImage?: (url: string) => Promise<string | null>;
 	/** Terminal height in rows (defaults to process.stdout.rows). */
 	rows?: () => number;
-	/** Max image height in terminal rows (default 8). */
+	/** Max image height in terminal rows (default 10). */
 	imageRows?: number;
+	/** Total panel height in rows (default: terminal rows minus the 1-row top/bottom margins). */
+	height?: () => number;
 }
 
 interface CachedImage {
@@ -141,6 +143,7 @@ export class FeedSidebarComponent {
 	private loadImage: (url: string) => Promise<string | null>;
 	private rows: () => number;
 	private imageRows: number;
+	private height: () => number;
 	private disposed = false;
 
 	constructor(
@@ -157,7 +160,8 @@ export class FeedSidebarComponent {
 		this.refreshIntervalMs = options?.refreshIntervalMs ?? 5 * 60_000;
 		this.loadImage = options?.loadImage ?? defaultLoadImage;
 		this.rows = options?.rows ?? (() => process.stdout.rows || 40);
-		this.imageRows = options?.imageRows ?? 8;
+		this.imageRows = options?.imageRows ?? 10;
+		this.height = options?.height ?? (() => this.rows() - 2);
 		void this.refresh();
 		this.startAutoRefresh();
 	}
@@ -292,9 +296,16 @@ export class FeedSidebarComponent {
 		);
 		lines.push(border(`├${"─".repeat(innerW)}┤`));
 
+		// Pad with empty rows so the panel always spans the full terminal height.
+		const totalH = Math.max(12, this.height());
+		const fill = (reserve: number) => {
+			while (lines.length < totalH - reserve) lines.push(border("│") + pad("") + border("│"));
+		};
+
 		// ── Loading / Error state ──
 		if (this.loading && this.tweets.length === 0) {
 			lines.push(border("│") + pad(th.fg("dim", " ⏳ Loading feed…")) + border("│"));
+			fill(1);
 			lines.push(border(`╰${"─".repeat(innerW)}╯`));
 			this.cachedLines = lines;
 			return lines;
@@ -302,6 +313,7 @@ export class FeedSidebarComponent {
 		if (this.error && this.tweets.length === 0) {
 			lines.push(border("│") + pad(th.fg("error", ` ✗ ${this.error}`)) + border("│"));
 			lines.push(border("│") + pad(th.fg("dim", " Press r to retry")) + border("│"));
+			fill(1);
 			lines.push(border(`╰${"─".repeat(innerW)}╯`));
 			this.cachedLines = lines;
 			return lines;
@@ -309,6 +321,7 @@ export class FeedSidebarComponent {
 
 		if (this.tweets.length === 0) {
 			lines.push(border("│") + pad(th.fg("dim", " No posts in feed")) + border("│"));
+			fill(1);
 			lines.push(border(`╰${"─".repeat(innerW)}╯`));
 			this.cachedLines = lines;
 			return lines;
@@ -318,7 +331,8 @@ export class FeedSidebarComponent {
 		// Each card is 3-4 lines. Figure out how many fit.
 		// Reserve 2 lines for footer + bottom border
 		// Overlay maxHeight is 90% of the terminal; leave room for header/footer/borders.
-		const maxBodyLines = Math.max(8, Math.floor(this.rows() * 0.9) - 7);
+		// header (3) + footer (separator, hints, bottom border = 3) + optional "Refreshing…" row
+		const maxBodyLines = Math.max(4, totalH - 6 - (this.loading ? 1 : 0));
 		const cardLines: string[][] = [];
 
 		for (let i = 0; i < this.tweets.length; i++) {
@@ -362,6 +376,7 @@ export class FeedSidebarComponent {
 		}
 
 		// ── Footer ──
+		fill(3 + (this.loading ? 1 : 0));
 		if (this.loading) {
 			lines.push(border("│") + pad(th.fg("dim", " ⏳ Refreshing…")) + border("│"));
 		}

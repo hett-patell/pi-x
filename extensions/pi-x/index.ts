@@ -637,9 +637,9 @@ export default function piX(pi: ExtensionAPI) {
 							overlay: true,
 							overlayOptions: {
 								anchor: "right-center",
-								width: "30%",
-								minWidth: 40,
-								maxHeight: "90%",
+								width: "40%",
+								minWidth: 50,
+								maxHeight: "100%",
 								margin: { right: 1, top: 1, bottom: 1 },
 								visible: (termWidth) => termWidth >= 100,
 								nonCapturing: true,

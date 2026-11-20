@@ -236,4 +236,15 @@ describe("FeedSidebarComponent", () => {
 		component.handleInput("q");
 		assert.equal(closed, 1);
 	});
+
+	it("fills the full terminal height", async () => {
+		const tui = { requestRender: () => {} };
+		const component = new FeedSidebarComponent(tui, mockTheme(), () => {}, {
+			loadFeed: async () => ({ tweets: [makeTweet("1", "a", "hi")], accountLabel: "me" }),
+		}, { refreshIntervalMs: 0, rows: () => 40 });
+		assert.equal(component.render(60).length, 38, "loading state spans terminal rows - margins");
+		await new Promise((r) => setTimeout(r, 20));
+		assert.equal(component.render(60).length, 38, "feed spans terminal rows - margins");
+		component.dispose();
+	});
 });
