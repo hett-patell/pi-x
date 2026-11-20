@@ -13,7 +13,16 @@
  */
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+	allocateImageId,
+	getCapabilities,
+	getPngDimensions,
+	hyperlink,
+	type ImageDimensions,
+	matchesKey,
+	renderImage,
+	truncateToWidth,
+} from "@earendil-works/pi-tui";
 import type { Tweet } from "../normalize.ts";
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -31,7 +40,38 @@ export interface FeedActions {
 export interface FeedSidebarOptions {
 	/** Auto-refresh interval in ms (default: 5 minutes). 0 = no auto-refresh. */
 	refreshIntervalMs?: number;
+	/** Fetch a media thumbnail as base64 PNG. Defaults to fetching from pbs.twimg.com. */
+	loadImage?: (url: string) => Promise<string | null>;
+	/** Terminal height in rows (defaults to process.stdout.rows). */
+	rows?: () => number;
+	/** Max image height in terminal rows (default 8). */
+	imageRows?: number;
 }
+
+interface CachedImage {
+	state: "loading" | "ready" | "failed";
+	data?: string;
+	dims?: ImageDimensions;
+	id: number;
+	/** Last encoded placement, reused so the terminal gets placement-only redraws. */
+	rendered?: { key: string; sequence: string; rows: number };
+}
+
+/** X media URL → small PNG thumbnail URL (Kitty only accepts PNG). */
+export function thumbUrl(url: string): string {
+	const u = url.split("?")[0]!.replace(/\.(jpe?g|png|webp|gif)$/i, "");
+	return `${u}?format=png&name=240x240`;
+}
+
+async function defaultLoadImage(url: string): Promise<string | null> {
+	const res = await fetch(thumbUrl(url), { signal: AbortSignal.timeout(15_000) });
+	if (!res.ok) return null;
+	const buf = Buffer.from(await res.arrayBuffer());
+	if (buf.length > 2_000_000) return null;
+	return buf.toString("base64");
+}
+
+const MAX_CACHED_IMAGES = 80;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -81,6 +121,14 @@ export class FeedSidebarComponent {
 	private cachedWidth: number | undefined;
 	private cachedLines: string[] | undefined;
 
+	// Media
+	private images = new Map<string, CachedImage>();
+	private showMedia = true;
+	private loadImage: (url: string) => Promise<string | null>;
+	private rows: () => number;
+	private imageRows: number;
+	private disposed = false;
+
 	constructor(
 		tui: FeedTUI,
 		theme: Theme,
@@ -93,6 +141,9 @@ export class FeedSidebarComponent {
 		this.done = done;
 		this.actions = actions;
 		this.refreshIntervalMs = options?.refreshIntervalMs ?? 5 * 60_000;
+		this.loadImage = options?.loadImage ?? defaultLoadImage;
+		this.rows = options?.rows ?? (() => process.stdout.rows || 40);
+		this.imageRows = options?.imageRows ?? 8;
 		void this.refresh();
 		this.startAutoRefresh();
 	}
@@ -128,6 +179,7 @@ export class FeedSidebarComponent {
 	}
 
 	dispose(): void {
+		this.disposed = true;
 		if (this.refreshTimer) {
 			clearInterval(this.refreshTimer);
 			this.refreshTimer = null;
@@ -155,6 +207,8 @@ export class FeedSidebarComponent {
 		} else if (matchesKey(data, "ctrl+d")) {
 			this.selectedIndex = Math.min(this.tweets.length - 1, this.selectedIndex + 5);
 			this.ensureVisible();
+		} else if (data === "m" || data === "M") {
+			this.showMedia = !this.showMedia;
 		} else if (data === "r" || data === "R") {
 			void this.refresh();
 			return;
@@ -227,7 +281,8 @@ export class FeedSidebarComponent {
 		// ── Tweet cards ──
 		// Each card is 3-4 lines. Figure out how many fit.
 		// Reserve 2 lines for footer + bottom border
-		const maxBodyLines = 30; // reasonable max for sidebar height
+		// Overlay maxHeight is 90% of the terminal; leave room for header/footer/borders.
+		const maxBodyLines = Math.max(8, Math.floor(this.rows() * 0.9) - 7);
 		const cardLines: string[][] = [];
 
 		for (let i = 0; i < this.tweets.length; i++) {
@@ -278,8 +333,7 @@ export class FeedSidebarComponent {
 		lines.push(
 			border("│") +
 				pad(
-					th.fg("dim", " ↑↓ scroll · r refresh · Esc close") +
-						(this.tweets.length > 0 ? th.fg("dim", ` · ${this.selectedIndex + 1}/${this.tweets.length}`) : ""),
+					th.fg("dim", ` ${this.selectedIndex + 1}/${this.tweets.length} · ↑↓ · m media · r refresh · Esc`),
 				) +
 				border("│"),
 		);
@@ -330,6 +384,10 @@ export class FeedSidebarComponent {
 		].join("  ");
 		lines.push(`    ${th.fg("dim", metrics)}`);
 
+		// Media
+		const media = t.media.length ? t.media : (t.quoted?.media ?? []);
+		if (media.length) lines.push(...this.renderMedia(media, contentW));
+
 		// Quoted tweet (compact)
 		if (t.quoted) {
 			const qText = t.quoted.text.replace(/\n+/g, " ").trim();
@@ -338,5 +396,60 @@ export class FeedSidebarComponent {
 		}
 
 		return lines;
+	}
+
+	// ─── Media ───────────────────────────────────────────────────────
+
+	private renderMedia(media: string[], contentW: number): string[] {
+		const th = this.theme;
+		const url = media[0]!;
+		const more = media.length > 1 ? ` +${media.length - 1}` : "";
+		const label = th.fg("dim", `    🖼 ${hyperlink(media.length > 1 ? `${media.length} media` : "media", url)}`);
+		if (!this.showMedia || !getCapabilities().images) return [label];
+
+		const img = this.image(url);
+		if (img.state === "loading") return [th.fg("dim", `    🖼 loading…${more}`)];
+		if (img.state === "failed" || !img.data || !img.dims) return [label];
+
+		const maxW = Math.max(4, contentW - 4);
+		const key = `${maxW}x${this.imageRows}`;
+		if (img.rendered?.key !== key) {
+			const r = renderImage(img.data, img.dims, { maxWidthCells: maxW, maxHeightCells: this.imageRows, imageId: img.id, moveCursor: false });
+			img.rendered = r ? { key, sequence: r.sequence, rows: r.rows } : undefined;
+		}
+		const r = img.rendered;
+		if (!r) return [label];
+		// Image escape anchored after the indent; following rows stay blank so the picture covers them.
+		const out = [`    ${r.sequence}`];
+		for (let i = 1; i < r.rows; i++) out.push("");
+		if (more) out.push(th.fg("dim", `    ${more} more`));
+		return out;
+	}
+
+	private image(url: string): CachedImage {
+		let img = this.images.get(url);
+		if (img) return img;
+		img = { state: "loading", id: allocateImageId() };
+		this.images.set(url, img);
+		if (this.images.size > MAX_CACHED_IMAGES) {
+			const oldest = this.images.keys().next().value;
+			if (oldest !== undefined && oldest !== url) this.images.delete(oldest);
+		}
+		const entry = img;
+		this.loadImage(url)
+			.then((data) => {
+				const dims = data ? getPngDimensions(data) : null;
+				if (data && dims) Object.assign(entry, { state: "ready", data, dims });
+				else entry.state = "failed";
+			})
+			.catch(() => {
+				entry.state = "failed";
+			})
+			.finally(() => {
+				if (this.disposed) return;
+				this.invalidate();
+				this.tui.requestRender();
+			});
+		return img;
 	}
 }

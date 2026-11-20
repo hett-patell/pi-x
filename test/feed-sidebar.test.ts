@@ -2,6 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { FeedSidebarComponent, type FeedActions } from "../extensions/pi-x/tui/feed-sidebar.ts";
 import type { Tweet } from "../extensions/pi-x/normalize.ts";
+import { setCapabilities, getCapabilities } from "@earendil-works/pi-tui";
+import { thumbUrl } from "../extensions/pi-x/tui/feed-sidebar.ts";
+
+// 1x1 PNG
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 function mockTheme(): any {
 	return {
@@ -146,5 +151,52 @@ describe("FeedSidebarComponent", () => {
 		const lines = component.render(60);
 		assert.ok(lines.some((l) => l.includes("retweeter")), "should show retweeted_by user");
 		component.dispose();
+	});
+
+	it("renders media as a kitty image once loaded", async () => {
+		const prev = getCapabilities();
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		try {
+			const tui = { requestRender: () => {} };
+			const tweet: Tweet = { ...makeTweet("300", "pics", "look"), media: ["https://pbs.twimg.com/media/ABC.jpg"] };
+			const loaded: string[] = [];
+			const component = new FeedSidebarComponent(tui, mockTheme(), () => {}, {
+				loadFeed: async () => ({ tweets: [tweet], accountLabel: "m" }),
+			}, { refreshIntervalMs: 0, loadImage: async (u) => { loaded.push(u); return PNG; }, rows: () => 50 });
+			await new Promise((r) => setTimeout(r, 20));
+			component.render(60); // triggers image load
+			await new Promise((r) => setTimeout(r, 20));
+			const lines = component.render(60);
+			assert.deepEqual(loaded, ["https://pbs.twimg.com/media/ABC.jpg"]);
+			assert.ok(lines.some((l) => l.includes("\x1b_G")), "should emit a kitty graphics sequence");
+			component.handleInput("m");
+			assert.ok(!component.render(60).some((l) => l.includes("\x1b_G")), "m hides media");
+			component.dispose();
+		} finally {
+			setCapabilities(prev);
+		}
+	});
+
+	it("falls back to a media link without image support", async () => {
+		const prev = getCapabilities();
+		setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+		try {
+			const tui = { requestRender: () => {} };
+			const tweet: Tweet = { ...makeTweet("301", "pics", "look"), media: ["https://pbs.twimg.com/media/A.jpg", "https://pbs.twimg.com/media/B.jpg"] };
+			const component = new FeedSidebarComponent(tui, mockTheme(), () => {}, {
+				loadFeed: async () => ({ tweets: [tweet], accountLabel: "m" }),
+			}, { refreshIntervalMs: 0, loadImage: async () => { throw new Error("should not load"); } });
+			await new Promise((r) => setTimeout(r, 20));
+			const lines = component.render(60);
+			assert.ok(lines.some((l) => l.includes("2 media")));
+			component.dispose();
+		} finally {
+			setCapabilities(prev);
+		}
+	});
+
+	it("thumbUrl requests a small PNG", () => {
+		assert.equal(thumbUrl("https://pbs.twimg.com/media/HXj_xgSbwAEQG_1.jpg"), "https://pbs.twimg.com/media/HXj_xgSbwAEQG_1?format=png&name=240x240");
+		assert.equal(thumbUrl("https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x.jpg?foo=1"), "https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x?format=png&name=240x240");
 	});
 });
