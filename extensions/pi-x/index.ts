@@ -12,7 +12,7 @@ import { loadConfig } from "./config.ts";
 import { createDeps } from "./deps.ts";
 import { FIXES, toXError, XError } from "./errors.ts";
 import { compareIds, type DmMessage, parseDmInbox, parseDmThread, parseTimeline, parseUser, type Tweet } from "./normalize.ts";
-import { errorOutput, personalAccount, paginate, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
+import { errorOutput, nextAccount, personalAccount, paginate, type Progress, readConfig, type ToolOutput, withAccount } from "./tools/context.ts";
 import { runDm, runDmInbox, runDmThread } from "./tools/dm.ts";
 import { runDoctor } from "./tools/doctor.ts";
 import { runPost, runLike, runRetweet, runBookmarkAdd } from "./tools/post.ts";
@@ -449,7 +449,7 @@ export default function piX(pi: ExtensionAPI) {
 					}
 					// Use personalAccount for consistent disambiguation (shows picker when needed)
 					const pick = async (title: string, options: string[]) => ctx.ui.select(title, options);
-					const pinned = await personalAccount(deps, pinnedAccountName, pick);
+					const pinned = await personalAccount(deps, pinnedAccountName, pick, { ask: true });
 					pinnedAccountName = pinned.name;
 				} catch (e) {
 					const x = toXError(e);
@@ -458,6 +458,15 @@ export default function piX(pi: ExtensionAPI) {
 					return;
 				}
 				const actions: DmChatActions = {
+					switchAccount: () => {
+						const next = nextAccount(deps, pinnedAccountName);
+						if (!next) {
+							ctx.ui.notify("Only one X account is connected — /x login to add another", "info");
+							return false;
+						}
+						pinnedAccountName = next.name;
+						return true;
+					},
 					loadInbox: async () => {
 						const { value } = await withAccount(deps, pinnedAccountName, undefined, async (a) => {
 							const viewer = await deps.engine.viewer(a, {});
@@ -543,7 +552,7 @@ export default function piX(pi: ExtensionAPI) {
 						if (own) pinnedFeedAccount = own.name;
 					}
 					const pick = async (title: string, options: string[]) => ctx.ui.select(title, options);
-					const pinned = await personalAccount(deps, pinnedFeedAccount, pick);
+					const pinned = await personalAccount(deps, pinnedFeedAccount, pick, { ask: true });
 					pinnedFeedAccount = pinned.name;
 				} catch (e) {
 					const x = toXError(e);
@@ -553,6 +562,15 @@ export default function piX(pi: ExtensionAPI) {
 				}
 
 				const feedActions: FeedActions = {
+					switchAccount: () => {
+						const next = nextAccount(deps, pinnedFeedAccount);
+						if (!next) {
+							ctx.ui.notify("Only one X account is connected — /x login to add another", "info");
+							return false;
+						}
+						pinnedFeedAccount = next.name;
+						return true;
+					},
 					loadFeed: async () => {
 						const { value, account } = await withAccount(deps, pinnedFeedAccount, undefined, async (a) => {
 							const r = await paginate(

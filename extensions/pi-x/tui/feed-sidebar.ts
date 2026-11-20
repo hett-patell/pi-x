@@ -35,6 +35,8 @@ export interface FeedTUI {
 /** Callbacks to load feed data. */
 export interface FeedActions {
 	loadFeed(): Promise<{ tweets: Tweet[]; accountLabel: string }>;
+	/** Switch to the next connected account; returns false when there is no other account. */
+	switchAccount?(): boolean;
 }
 
 export interface FeedSidebarOptions {
@@ -150,13 +152,17 @@ export class FeedSidebarComponent {
 
 	// ─── Data loading ────────────────────────────────────────────────
 
+	private loadGen = 0;
+
 	private async refresh(): Promise<void> {
+		const gen = ++this.loadGen;
 		this.loading = true;
 		this.error = null;
 		this.invalidate();
 		this.tui.requestRender();
 		try {
 			const r = await this.actions.loadFeed();
+			if (gen !== this.loadGen) return; // superseded (account switch / manual refresh)
 			this.tweets = r.tweets;
 			this.accountLabel = r.accountLabel;
 			this.lastRefresh = new Date();
@@ -166,6 +172,7 @@ export class FeedSidebarComponent {
 				this.selectedIndex = Math.max(0, this.tweets.length - 1);
 			}
 		} catch (e) {
+			if (gen !== this.loadGen) return;
 			this.error = e instanceof Error ? e.message : String(e);
 			this.loading = false;
 		}
@@ -207,6 +214,13 @@ export class FeedSidebarComponent {
 		} else if (matchesKey(data, "ctrl+d")) {
 			this.selectedIndex = Math.min(this.tweets.length - 1, this.selectedIndex + 5);
 			this.ensureVisible();
+		} else if ((data === "a" || data === "A") && this.actions.switchAccount) {
+			if (!this.actions.switchAccount()) return;
+			this.tweets = [];
+			this.selectedIndex = 0;
+			this.scrollOffset = 0;
+			void this.refresh();
+			return;
 		} else if (data === "m" || data === "M") {
 			this.showMedia = !this.showMedia;
 		} else if (data === "r" || data === "R") {
@@ -333,7 +347,7 @@ export class FeedSidebarComponent {
 		lines.push(
 			border("│") +
 				pad(
-					th.fg("dim", ` ${this.selectedIndex + 1}/${this.tweets.length} · ↑↓ · m media · r refresh · Esc`),
+					th.fg("dim", ` ${this.selectedIndex + 1}/${this.tweets.length} · ↑↓ · m media ·${this.actions.switchAccount ? " a acct ·" : ""} r · Esc`),
 				) +
 				border("│"),
 		);

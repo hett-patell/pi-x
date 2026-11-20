@@ -3,7 +3,7 @@ import { findAccount, maskProxy } from "./accounts.ts";
 import { sessionName } from "./browser.ts";
 import { type Config, isManagedProfile, profileFor, statePath, updateAccount, updateConfig, validateAccountName } from "./config.ts";
 import { toXError, XError } from "./errors.ts";
-import { readConfig, type ToolDeps } from "./tools/context.ts";
+import { forgetAccountChoice, readConfig, type ToolDeps } from "./tools/context.ts";
 import { runDoctor } from "./tools/doctor.ts";
 
 export interface CommandUI {
@@ -244,6 +244,7 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 					updateConfig(deps.paths, (c) => {
 						delete c.active;
 					});
+					forgetAccountChoice(deps);
 					ui.say("✓ Rotation: auto (least-recently-used account first)");
 					break;
 				}
@@ -252,6 +253,7 @@ export async function runCommand(input: string, deps: ToolDeps, ui: CommandUI): 
 				updateConfig(deps.paths, (c) => {
 					c.active = name;
 				});
+				forgetAccountChoice(deps);
 				ui.say(`✓ Tools now use "${name}" (rotate again with /x use auto)`);
 				break;
 			}

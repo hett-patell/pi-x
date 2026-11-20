@@ -127,3 +127,26 @@ test("x_dm with two accounts uses explicit account param", async () => {
 	assert.equal(out.details.sent, true);
 	assert.deepEqual(deps.calls.filter((c) => c.includes(":dm:")), ["b:dm:42"]);
 });
+
+test("personalAccount: ask re-prompts instead of reusing the session choice; nextAccount cycles", async () => {
+	const { personalAccount, nextAccount, forgetAccountChoice } = await import("../extensions/pi-x/tools/context.ts");
+	const deps = fakeDeps({}, twoAccounts({ active: undefined }));
+	const picks: string[] = [];
+	const pick = async (_title: string, names: string[]) => {
+		const n = picks.length === 0 ? "a" : "b";
+		picks.push(n);
+		return names.find((x) => x.endsWith(`(${n})`));
+	};
+	assert.equal((await personalAccount(deps, undefined, pick)).name, "a");
+	// Without ask: the session choice is reused, no prompt.
+	assert.equal((await personalAccount(deps, undefined, pick)).name, "a");
+	assert.equal(picks.length, 1);
+	// With ask: prompts again and returns the new pick.
+	assert.equal((await personalAccount(deps, undefined, pick, { ask: true })).name, "b");
+	assert.equal(picks.length, 2);
+	forgetAccountChoice(deps);
+	assert.equal(nextAccount(deps, "a")?.name, "b");
+	assert.equal(nextAccount(deps, "b")?.name, "a");
+	const solo = fakeDeps({}, { version: 1, accounts: [{ name: "a", enabled: true, handle: "alice" }] });
+	assert.equal(nextAccount(solo, "a"), undefined);
+});

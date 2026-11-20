@@ -199,4 +199,21 @@ describe("FeedSidebarComponent", () => {
 		assert.equal(thumbUrl("https://pbs.twimg.com/media/HXj_xgSbwAEQG_1.jpg"), "https://pbs.twimg.com/media/HXj_xgSbwAEQG_1?format=png&name=240x240");
 		assert.equal(thumbUrl("https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x.jpg?foo=1"), "https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x?format=png&name=240x240");
 	});
+
+	it("a switches account and reloads", async () => {
+		const tui = { requestRender: () => {} };
+		let acct = "one";
+		const component = new FeedSidebarComponent(tui, mockTheme(), () => {}, {
+			loadFeed: async () => ({ tweets: [makeTweet("1", acct + "_poster", "hi")], accountLabel: acct }),
+			switchAccount: () => { acct = "two"; return true; },
+		}, { refreshIntervalMs: 0 });
+		await new Promise((r) => setTimeout(r, 20));
+		assert.ok(component.render(60).some((l) => l.includes("@one")));
+		component.handleInput("a");
+		await new Promise((r) => setTimeout(r, 20));
+		const lines = component.render(60);
+		assert.ok(lines.some((l) => l.includes("@two")), "header shows new account");
+		assert.ok(lines.some((l) => l.includes("two_poster")), "feed reloaded for new account");
+		component.dispose();
+	});
 });

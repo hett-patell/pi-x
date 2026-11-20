@@ -56,7 +56,29 @@ export function rememberedAccount(deps: ToolDeps): string | undefined {
  * account; else the /x use pin; else the account chosen earlier this session; else ask the user.
  * Without a UI to ask, it fails and lists the accounts so the caller can pass one.
  */
-export async function personalAccount(deps: ToolDeps, requested: string | undefined, pick?: PickAccount): Promise<Account> {
+/** Connected (enabled + logged-in) accounts, in config order. */
+export function connectedAccounts(deps: ToolDeps): Account[] {
+	return readConfig(deps).accounts.filter((a) => a.enabled && a.handle);
+}
+
+/** The connected account after `current` (wraps around), for in-overlay switching. */
+export function nextAccount(deps: ToolDeps, current: string | undefined): Account | undefined {
+	const list = connectedAccounts(deps);
+	if (list.length < 2) return undefined;
+	const i = list.findIndex((a) => a.name === current);
+	return list[(i + 1) % list.length];
+}
+
+/**
+ * opts.ask: interactive commands (/x feed, /x dm) ask again instead of silently reusing the
+ * session's earlier choice, so the user can pick a different account each time.
+ */
+export async function personalAccount(
+	deps: ToolDeps,
+	requested: string | undefined,
+	pick?: PickAccount,
+	opts: { ask?: boolean } = {},
+): Promise<Account> {
 	const cfg = readConfig(deps);
 	if (requested) {
 		const a = findAccount(cfg, requested);
@@ -70,7 +92,7 @@ export async function personalAccount(deps: ToolDeps, requested: string | undefi
 	const pinned = connected.find((a) => a.name === cfg.active);
 	if (pinned) return pinned;
 	const remembered = connected.find((a) => a.name === chosen.get(deps));
-	if (remembered) return remembered;
+	if (remembered && !(opts.ask && pick)) return remembered;
 	if (!pick) {
 		throw new XError(
 			"invalid_input",

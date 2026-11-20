@@ -24,6 +24,8 @@ export interface DmChatActions {
 	loadInbox(): Promise<{ conversations: DmConversation[]; selfId: string; accountLabel: string }>;
 	loadThread(handle: string): Promise<{ messages: DmMessage[]; selfId: string; otherHandle: string }>;
 	sendMessage(handle: string, text: string): Promise<{ ok: boolean; error?: string }>;
+	/** Switch to the next connected account; returns false when there is no other account. */
+	switchAccount?(): boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────
@@ -82,12 +84,16 @@ export class DmChatComponent {
 
 	// ─── Data loading ────────────────────────────────────────────────
 
+	private inboxGen = 0;
+
 	private async loadInbox(): Promise<void> {
+		const gen = ++this.inboxGen;
 		this.inboxLoading = true;
 		this.inboxError = null;
 		this.tui.requestRender();
 		try {
 			const r = await this.actions.loadInbox();
+			if (gen !== this.inboxGen) return; // superseded by a newer load (account switch)
 			this.conversations = r.conversations;
 			this.selfId = r.selfId;
 			this.accountLabel = r.accountLabel;
@@ -101,6 +107,7 @@ export class DmChatComponent {
 				return;
 			}
 		} catch (e) {
+			if (gen !== this.inboxGen) return;
 			this.inboxError = e instanceof Error ? e.message : String(e);
 			this.inboxLoading = false;
 		}
@@ -180,6 +187,12 @@ export class DmChatComponent {
 			if (c) void this.openThread(c.handle);
 			return;
 		} else if (data === "r" || data === "R") {
+			void this.loadInbox();
+			return;
+		} else if ((data === "a" || data === "A") && this.actions.switchAccount) {
+			if (!this.actions.switchAccount()) return;
+			this.conversations = [];
+			this.accountLabel = "";
 			void this.loadInbox();
 			return;
 		} else {
@@ -323,7 +336,7 @@ export class DmChatComponent {
 		}
 
 		lines.push(row(""));
-		lines.push(row(` ${th.fg("dim", "↑↓ navigate · Enter open · r refresh · Esc close")}`));
+		lines.push(row(` ${th.fg("dim", `↑↓ navigate · Enter open · r refresh${this.actions.switchAccount ? " · a switch account" : ""} · Esc close`)}`));
 		lines.push(hline("╰", "─", "╯"));
 
 		return lines.map(l => truncateToWidth(l, width));
