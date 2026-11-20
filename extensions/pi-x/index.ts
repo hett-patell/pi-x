@@ -560,9 +560,15 @@ export default function piX(pi: ExtensionAPI) {
 									parseTimeline(
 										await deps.engine.graphql(
 											a,
-											"HomeLatestTimeline",
-											{ count: 20, includePromotedContent: false, latestControlAvailable: true, ...(cursor ? { cursor } : {}) },
-											{},
+											"SearchTimeline",
+											{
+												rawQuery: "filter:follows -filter:replies",
+												count: 20,
+												querySource: "typed_query",
+												product: "Latest",
+												...(cursor ? { cursor } : {}),
+											},
+											{ method: "POST" },
 										),
 									),
 								40, // fetch up to 40 tweets for the sidebar
