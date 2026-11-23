@@ -4,12 +4,13 @@
 
 [![pi-package](https://img.shields.io/badge/pi-package-blueviolet?style=flat-square)](https://pi.dev/packages)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-114%20passing-brightgreen?style=flat-square)](./test)
+[![tests](https://img.shields.io/badge/tests-133%20passing-brightgreen?style=flat-square)](./test)
 [![npm](https://img.shields.io/npm/v/@hett/pi-x?style=flat-square)](https://www.npmjs.com/package/@hett/pi-x)
 
 pi-x is a [Pi](https://pi.dev) extension that lets your coding agent read X (Twitter) through
 **your own logged-in browser session** — trending topics and news, keyword search with real
-stats, threads, and profiles. No developer account, no $200/mo API tier, no cookies handed to
+stats, threads, profiles, your home feed and DMs — plus a live feed sidebar and DM chat right
+inside the Pi TUI. No developer account, no $200/mo API tier, no cookies handed to
 a third-party script.
 
 ---
@@ -48,9 +49,11 @@ sampled live from X. No scraped HTML dump, no "I don't have access to real-time 
 - **Self-healing** — discovers X's internal API query IDs and features at runtime, and falls
   back to page-scraping when X changes something, instead of breaking outright.
 - **Multi-account rotation** — add several accounts; pi-x rotates and backs off on rate limits.
+- **X inside your terminal** — `/x feed` docks a live home feed beside the editor (with inline
+  images on Kitty/iTerm2) while you keep typing; `/x dm` is a full DM chat panel.
 - **Cookies never leave the browser** — calls run *inside* the logged-in page; pi-x never
   extracts your cookies or sends them anywhere.
-- **Read-only by default** — no posting, liking, or following. DM access and posting are opt-in via `/x write on`.
+- **Read-only by default** — no posting, liking, or following. DMs, posting, likes, retweets and bookmarks are opt-in via `/x write on`.
 
 ## How pi-x compares
 
@@ -118,7 +121,7 @@ What's trending on X right now, and why?
 | `x_bookmarks` | `limit?`, `sort?`, `account?` | List your bookmarked posts with engagement stats. Needs `/x write on` (read-only). |
 | `x_retweeters` | `id_or_url`, `limit?`, `account?` | List who retweeted a post (handle, name, verified, follower count). |
 | `x_likers` | `id_or_url`, `limit?`, `account?` | List who liked a post. Same format. |
-| `x_home` | `limit?`, `sort?`, `account?` | Read your home/following feed with engagement stats. |
+| `x_home` | `limit?`, `sort?`, `account?` | Recent posts from accounts you follow (replies excluded), with engagement stats. |
 
 ## Commands
 
@@ -135,13 +138,42 @@ What's trending on X right now, and why?
 | `/x proxy <account> [url\|off]` | Set or clear an account's proxy |
 | `/x import-chrome <account>` | Reuse your desktop Chrome login for an account |
 | `/x location [place\|default]` | Default region for `x_trending` |
-| `/x write on\|off [--no-confirm]` | Allow DM access: read inbox + send (off by default). `--no-confirm` skips the per-message prompt, e.g. for headless use |
-| `/x dm [user]` | Interactive DM chat overlay — browse conversations, read threads, type and send messages in a TUI panel. Opens inbox by default; with a user, jumps straight to that thread |
+| `/x write on\|off [--no-confirm]` | Allow write access: DMs, posting, likes, retweets, bookmarks (off by default). `--no-confirm` skips the per-action prompt, e.g. for headless use |
+| `/x feed [account\|close]` | Live home-feed sidebar beside the editor — see [Feed sidebar](#feed-sidebar) |
+| `/x dm [account] [user]` | Interactive DM chat overlay — browse conversations, read threads, type and send. With a user, jumps straight to that thread. Needs `/x write on` |
 | `/x doctor` | Full health check with fixes |
 | `/x backup [account]` | Save the account's login state to a file (0600) |
 | `/x restore [account]` | Restore a saved login state |
 | `/x close` | Close all pi-x browser windows |
 | `/x help` | Show all commands |
+
+## Feed sidebar
+
+`/x feed` docks your X home feed on the right side of the terminal, full height, and refreshes
+every 5 minutes. The editor **keeps the keyboard**, so you can keep chatting with Pi while the
+feed is open.
+
+| Key | Action |
+|---|---|
+| `alt+x` (or `/x feed` again) | Focus the feed |
+| `↑` `↓` · `ctrl+u` `ctrl+d` | Scroll posts |
+| `m` | Toggle inline images |
+| `a` | Switch to the next connected account |
+| `r` | Refresh now |
+| `Tab` / `Esc` | Hand the keyboard back to the editor (feed stays open) |
+| `q` or `/x feed close` | Close the feed |
+
+- **Images** render inline on terminals with graphics support (Kitty, Ghostty, WezTerm,
+  iTerm2); elsewhere you get a clickable `🖼 media` link.
+- With more than one account connected, `/x feed` and `/x dm` ask which account to use each time
+  they open; `a` switches inside the panel. `/x use <account>` pins one and skips the prompt.
+- The sidebar hides on terminals narrower than 100 columns.
+
+## DM chat
+
+`/x dm` opens an inbox overlay: `↑↓` to pick a conversation, `Enter` to open it, type and press
+`Enter` to send, `Esc` to go back, `a` to switch account, `r` to refresh. `/x dm <user>` jumps
+straight to that thread. Needs `/x write on`.
 
 ## Example prompts
 
@@ -154,6 +186,8 @@ What's trending on X right now, and why?
 - "Summarize this thread: https://x.com/user/status/12345" *(with reply reactions)*
 - "What do people think of this post's replies?"
 - "Look up @someaccount — are they a credible source?"
+- "What did I miss on my feed?" *(`x_home`)*
+- "Check my DMs — anything unread?" *(`x_dm_inbox`, needs `/x write on`)*
 - "Has pi-x's X session stopped working? Run a diagnostic."
 
 ## How it works
@@ -198,7 +232,7 @@ locks are per process, and exiting one Pi closes the pi-x browser sessions the o
   private; anyone holding it can use your X session.
 - Config (`~/.pi/agent/pi-x/config.json`) is written `0600`.
 - Proxy credentials are masked in every message, log, and tool output.
-- Read-only by default: no posting, liking, or following, and DMs are untouched. `/x write on` lets `x_dm_inbox` and `x_dm_thread` read your DMs, `x_dm` send them, and `x_post` post tweets. Each write action shows what will be sent for you to approve (unless you chose `--no-confirm`), goes out from exactly one account, and is never retried — so no duplicates or messages from the wrong account.
+- Read-only by default: no posting, liking, or following, and DMs are untouched. `/x write on` lets `x_dm_inbox` and `x_dm_thread` read your DMs, `x_dm` send them, `x_post` post tweets, and `x_like` / `x_retweet` / `x_bookmark` act on posts. Each write action shows what will be sent for you to approve (unless you chose `--no-confirm`), goes out from exactly one account, and is never retried — so no duplicates or messages from the wrong account.
 - Use a secondary/burner X account if you're not comfortable connecting your main one.
 - You're responsible for respecting X's Terms of Service and rate limits — pi-x backs off on
   rate limits automatically but doesn't bypass them.

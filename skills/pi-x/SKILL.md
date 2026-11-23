@@ -36,6 +36,7 @@ Tools: `x_trending`, `x_search`, `x_tweet`, `x_user`, `x_doctor`, `x_dm_inbox`, 
 | Who liked a post | `x_likers(id_or_url, limit?)` — list who liked it |
 | My home feed | `x_home(limit?, sort?)` — what did I miss? |
 | Interactive DM chat | `/x dm` — full TUI overlay with inbox + threads. `/x dm <user>` jumps straight to a thread. Needs `/x write on` |
+| Live feed panel | `/x feed` — user-run sidebar beside the editor (not a tool). Suggest it when they want to watch their feed while working |
 
 - Don't pass `account` unless the user named one — rotation is automatic.
 - Search a trend's `query` exactly as returned; don't add `lang: "en"` to a non-English trend.

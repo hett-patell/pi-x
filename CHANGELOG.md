@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.0.0 — 2026-11-23
+
+### Added
+- **`/x feed` — live feed sidebar.** Your home feed docked full-height on the right of the TUI,
+  auto-refreshing every 5 minutes.
+  - Non-capturing: the editor keeps the keyboard. `alt+x` (or `/x feed` again) focuses the feed,
+    `Tab`/`Esc` hand input back, `q` or `/x feed close` closes it.
+  - Inline media thumbnails via Kitty/iTerm2 graphics (`m` toggles); clickable `🖼 media` link
+    on other terminals.
+  - `a` cycles to the next connected account.
+- **`/x dm` — interactive DM chat overlay** (inbox, threads, compose + send), with
+  `/x dm [account] [user]` syntax and `a` to switch account.
+- Tools: `x_dm_thread`, `x_followers`, `x_following`, `x_post`, `x_like`, `x_retweet`,
+  `x_bookmark`, `x_bookmarks`, `x_retweeters`, `x_likers`, `x_home` (18 tools total).
+- DM threads paginate through the full history; encrypted messages are shown as placeholders.
+
+### Changed (breaking)
+- `/x write on` now gates **all** write actions — DMs, posts, likes, retweets, bookmarks — and
+  bookmark reading, not just DMs.
+- `x_home` returns recent posts from accounts you follow, replies excluded (`filter:follows`
+  search). X removed the `HomeLatestTimeline` API, so the algorithmic "For you" ordering is gone.
+- Personal tools (DMs, bookmarks, home) never rotate across accounts: with several connected they
+  use the pinned account or ask once per session. `/x feed` and `/x dm` ask on every open;
+  `/x use` clears the remembered choice.
+
+### Fixed
+- `/x dm` accepts account names that aren't valid X handles.
+- `x_home` / `/x feed` failing with `operation HomeLatestTimeline not found in main bundle`.
+
 ## 1.1.0 — 2026-10-05
 
 ### Added
